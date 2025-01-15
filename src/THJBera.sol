@@ -2,6 +2,7 @@
 pragma solidity ^0.8.23;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
@@ -38,6 +39,9 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     function unpause() external onlyOwner {
         _unpause();
     }
+    function withdraw(uint256 assets, address receiver) external onlyOwner {
+        SafeERC20.safeTransferFrom(IERC20(asset()), address(this), receiver, assets);
+    }
     /*###############################################################
                             EXTERNAL LOGIC
     ###############################################################*/
@@ -59,4 +63,8 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /*###############################################################
                             VIEW LOGIC
     ###############################################################*/
+
+    /*###############################################################
+    ###############################################################*/
+    receive() external payable {}
 }
