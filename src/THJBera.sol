@@ -9,22 +9,21 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 
 contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
-
     /*###############################################################
-                            CUSTOM ERRORS
+                            ERRORS
     ###############################################################*/
     error ZeroPrincipal();
     error ExceedsPrincipal();
     error ZeroRewards();
-
     /*###############################################################
                             STORAGE
     ###############################################################*/
-    uint256 public rewardPerShareStored; 
-    mapping(address => uint256) public userRewardPerSharePaid; 
-    mapping(address => uint256) public rewards; 
     uint256 public lastTotalSupply; 
     uint256 public depositPrincipal;
+    uint256 public rewardPerShareStored;
+
+    mapping(address => uint256) public userRewardPerSharePaid; 
+    mapping(address => uint256) public rewards; 
 
     /*###############################################################
                             CONSTRUCTOR
@@ -41,10 +40,6 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         __ERC4626_init(IERC20(_asset));
         __ERC20_init("THJBera", "thjBERA");
         __Ownable_init(_owner);
-
-        rewardPerShareStored = 0;
-        lastTotalSupply = 0;
-        depositPrincipal = 0;
 
         _pause();
     }
@@ -65,7 +60,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *      so those tokens can be staked in a validator. This ensures yield
      *      remains in the vault, as depositPrincipal decrements.
      */
-    function withdrawPrincipal(uint256 assets, address receiver) external onlyOwner {
+    function withdrawPrincipal(uint256 assets, address receiver)external onlyOwner {
         if (assets <= 0) revert ZeroPrincipal();
         if (assets > depositPrincipal) revert ExceedsPrincipal();
 
@@ -107,10 +102,10 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *         increment depositPrincipal.
      */
     function deposit(uint256 assets, address receiver)
-        public
-        virtual
-        override
-        returns (uint256)
+    public
+    virtual
+    override
+    returns (uint256)
     {
         _updateRewards(receiver);
 
@@ -126,10 +121,10 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *         and consistent depositPrincipal increments.
      */
     function mint(uint256 shares, address receiver)
-        public
-        virtual
-        override
-        returns (uint256)
+    public
+    virtual
+    override
+    returns (uint256) 
     {
         _updateRewards(receiver);
 
@@ -147,10 +142,10 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *         specific chain events enabling principal withdrawals).
      */
     function withdraw(uint256 assets, address receiver, address owner)
-        public
-        override
-        whenNotPaused
-        returns (uint256)
+    public
+    override
+    whenNotPaused
+    returns (uint256)
     {
         claimRewards();
 
