@@ -11,6 +11,13 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     using SafeERC20 for IERC20;
 
     /*###############################################################
+                            CUSTOM ERRORS
+    ###############################################################*/
+    error ZeroPrincipal();
+    error ExceedsPrincipal();
+    error ZeroRewards();
+
+    /*###############################################################
                             STORAGE
     ###############################################################*/
     uint256 public rewardPerShareStored; 
@@ -59,8 +66,8 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *      remains in the vault, as depositPrincipal decrements.
      */
     function withdrawPrincipal(uint256 assets, address receiver) external onlyOwner {
-        require(assets > 0, "No principal specified");
-        require(assets <= depositPrincipal, "Exceeds total deposit principal");
+        if (assets <= 0) revert ZeroPrincipal();
+        if (assets > depositPrincipal) revert ExceedsPrincipal();
 
         depositPrincipal -= assets;
         IERC20(asset()).safeTransfer(receiver, assets);
@@ -72,7 +79,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *      proportionally to the total shares in existence.
      */
     function notifyRewardAmount(uint256 rewardAmount) external onlyOwner {
-        require(rewardAmount > 0, "No rewards added");
+        if (rewardAmount <= 0) revert ZeroRewards();
 
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), rewardAmount);
 
