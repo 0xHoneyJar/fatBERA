@@ -71,7 +71,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *      that new reward tokens have arrived. This increments "rewardPerShareStored"
      *      proportionally to the total shares in existence.
      */
-    function notifyRewardAmount(uint256 rewardAmount) external onlyOwner whenNotPaused {
+    function notifyRewardAmount(uint256 rewardAmount) external onlyOwner {
         require(rewardAmount > 0, "No rewards added");
 
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), rewardAmount);
