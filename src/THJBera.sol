@@ -15,12 +15,15 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     error ZeroPrincipal();
     error ExceedsPrincipal();
     error ZeroRewards();
+    error ExceedsMaxDeposits();
+    error InvalidMaxDeposits();
     /*###############################################################
                             STORAGE
     ###############################################################*/
     uint256 public lastTotalSupply; 
     uint256 public depositPrincipal;
     uint256 public rewardPerShareStored;
+    uint256 public maxDeposits;
 
     mapping(address => uint256) public userRewardPerSharePaid; 
     mapping(address => uint256) public rewards; 
@@ -36,11 +39,12 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /*###############################################################
                             INITIALIZER
     ###############################################################*/
-    function initialize(address _asset, address _owner) external initializer {
+    function initialize(address _asset, address _owner, uint256 _maxDeposits) external initializer {
         __ERC4626_init(IERC20(_asset));
         __ERC20_init("THJBera", "thjBERA");
         __Ownable_init(_owner);
 
+        maxDeposits = _maxDeposits;
         _pause();
     }
 
@@ -53,6 +57,15 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    /**
+     * @notice Updates the maximum amount of deposits allowed
+     * @param newMax The new maximum deposit amount
+     */
+    function setMaxDeposits(uint256 newMax) external onlyOwner {
+        if (newMax < depositPrincipal) revert InvalidMaxDeposits();
+        maxDeposits = newMax;
     }
 
     /**
@@ -107,6 +120,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     override
     returns (uint256)
     {
+        if (depositPrincipal + assets > maxDeposits) revert ExceedsMaxDeposits();
         _updateRewards(receiver);
 
         uint256 sharesMinted = super.deposit(assets, receiver);
@@ -128,9 +142,11 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     {
         _updateRewards(receiver);
 
-        uint256 assetsRequired = super.mint(shares, receiver);
-        lastTotalSupply = totalSupply();
+        uint256 assetsRequired = super.previewMint(shares);
+        if (depositPrincipal + assetsRequired > maxDeposits) revert ExceedsMaxDeposits();
 
+        assetsRequired = super.mint(shares, receiver);
+        lastTotalSupply = totalSupply();
         depositPrincipal += assetsRequired;
 
         return assetsRequired;
@@ -204,7 +220,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     function _updateRewards(address account) internal {
         uint256 _rewardPerShare = rewardPerShareStored;
 
-        // Update user’s pending rewards
+        // Update user's pending rewards
         uint256 accountShares = balanceOf(account);
         if (accountShares > 0) {
             uint256 earnedPerShare = _rewardPerShare - userRewardPerSharePaid[account];
