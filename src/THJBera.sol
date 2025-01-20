@@ -12,6 +12,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /*###############################################################
                             ERRORS
     ###############################################################*/
+
     error ZeroPrincipal();
     error ExceedsPrincipal();
     error ZeroRewards();
@@ -20,13 +21,14 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /*###############################################################
                             STORAGE
     ###############################################################*/
-    uint256 public lastTotalSupply; 
+
+    uint256 public lastTotalSupply;
     uint256 public depositPrincipal;
     uint256 public rewardPerShareStored;
     uint256 public maxDeposits;
 
-    mapping(address => uint256) public userRewardPerSharePaid; 
-    mapping(address => uint256) public rewards; 
+    mapping(address => uint256) public userRewardPerSharePaid;
+    mapping(address => uint256) public rewards;
 
     /*###############################################################
                             CONSTRUCTOR
@@ -73,7 +75,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *      so those tokens can be staked in a validator. This ensures yield
      *      remains in the vault, as depositPrincipal decrements.
      */
-    function withdrawPrincipal(uint256 assets, address receiver)external onlyOwner {
+    function withdrawPrincipal(uint256 assets, address receiver) external onlyOwner {
         if (assets <= 0) revert ZeroPrincipal();
         if (assets > depositPrincipal) revert ExceedsPrincipal();
 
@@ -82,7 +84,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     }
 
     /**
-     * @dev Allows owner (or another trusted source) to notify the contract 
+     * @dev Allows owner (or another trusted source) to notify the contract
      *      that new reward tokens have arrived. This increments "rewardPerShareStored"
      *      proportionally to the total shares in existence.
      */
@@ -103,8 +105,8 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
                             EXTERNAL LOGIC
     ###############################################################*/
     /**
-     * @dev Override to return only totalSupply, ignoring any extra tokens from yield or 
-     * tokens removed by owner to stake in validator. Shares are always worth 1 WBERA and 
+     * @dev Override to return only totalSupply, ignoring any extra tokens from yield or
+     * tokens removed by owner to stake in validator. Shares are always worth 1 WBERA and
      * all yield is handled by the rewards logic.
      */
     function totalAssets() public view virtual override returns (uint256) {
@@ -114,12 +116,8 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      * @notice Overridden deposit logic to account for rewards, then
      *         increment depositPrincipal.
      */
-    function deposit(uint256 assets, address receiver)
-    public
-    virtual
-    override
-    returns (uint256)
-    {
+
+    function deposit(uint256 assets, address receiver) public virtual override returns (uint256) {
         if (depositPrincipal + assets > maxDeposits) revert ExceedsMaxDeposits();
         _updateRewards(receiver);
 
@@ -134,12 +132,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      * @notice Overridden mint logic with same reward update approach,
      *         and consistent depositPrincipal increments.
      */
-    function mint(uint256 shares, address receiver)
-    public
-    virtual
-    override
-    returns (uint256) 
-    {
+    function mint(uint256 shares, address receiver) public virtual override returns (uint256) {
         _updateRewards(receiver);
 
         uint256 assetsRequired = super.previewMint(shares);
@@ -158,10 +151,10 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *         specific chain events enabling principal withdrawals).
      */
     function withdraw(uint256 assets, address receiver, address owner)
-    public
-    override
-    whenNotPaused
-    returns (uint256)
+        public
+        override
+        whenNotPaused
+        returns (uint256)
     {
         claimRewards();
 
@@ -175,12 +168,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /**
      * @notice Overridden redeem logic that also handles reward distribution.
      */
-    function redeem(uint256 shares, address receiver, address owner)
-        public
-        override
-        whenNotPaused
-        returns (uint256)
-    {
+    function redeem(uint256 shares, address receiver, address owner) public override whenNotPaused returns (uint256) {
         claimRewards();
 
         uint256 redeemedAssets = super.redeem(shares, receiver, owner);

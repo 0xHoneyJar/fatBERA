@@ -16,9 +16,11 @@ contract THJBeraTest is Test {
     address public charlie;
 
     uint256 public constant INITIAL_MINT = 2000000 ether;
-    
+
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
-    event Withdraw(address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares);
+    event Withdraw(
+        address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares
+    );
 
     function setUp() public {
         // Setup accounts
@@ -29,19 +31,11 @@ contract THJBeraTest is Test {
 
         // Deploy mock WBERA
         wbera = new MockERC20("Wrapped BERA", "WBERA", 18);
-        
+
         // Deploy implementation and proxy
         THJBera implementation = new THJBera();
-        bytes memory initData = abi.encodeWithSelector(
-            THJBera.initialize.selector,
-            address(wbera),
-            owner,
-            maxDeposits
-        );
-        ERC1967Proxy proxy = new ERC1967Proxy(
-            address(implementation),
-            initData
-        );
+        bytes memory initData = abi.encodeWithSelector(THJBera.initialize.selector, address(wbera), owner, maxDeposits);
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
         address payable proxyPayable = payable(address(proxy));
         vault = THJBera(proxyPayable);
 
@@ -75,7 +69,7 @@ contract THJBeraTest is Test {
         // Should succeed even when paused
         vm.prank(alice);
         uint256 sharesMinted = vault.deposit(100e18, alice);
-        
+
         assertEq(sharesMinted, 100e18, "Shares should be 1:1 with deposit");
         assertEq(vault.balanceOf(alice), 100e18);
     }
@@ -100,11 +94,11 @@ contract THJBeraTest is Test {
         // With 100 total shares, each share should get 0.1 WBERA (or 0.1e18 in raw units)
         vm.prank(owner);
         vault.notifyRewardAmount(10e18);
-        
+
         // Manual calculation for first reward
         uint256 expectedRewardPerShare = (10e18 * 1e18) / 100e18; // Should be 0.1e18
         uint256 expectedAliceReward = (100e18 * expectedRewardPerShare) / 1e18; // Should be 10e18
-        
+
         assertEq(vault.rewardPerShareStored(), expectedRewardPerShare, "Reward per share calculation mismatch");
         assertEq(vault.previewRewards(alice), expectedAliceReward, "First reward preview mismatch");
         assertEq(vault.previewRewards(alice), 10e18, "First reward should be 10 WBERA");
@@ -112,7 +106,7 @@ contract THJBeraTest is Test {
         // Bob deposits 100 WBERA
         vm.prank(bob);
         vault.deposit(100e18, bob);
-        
+
         // Second reward: 20 WBERA
         // With 200 total shares, each share should get 0.1 WBERA
         vm.prank(owner);
@@ -120,7 +114,7 @@ contract THJBeraTest is Test {
 
         // Manual calculation for second reward
         uint256 secondRewardPerShare = (20e18 * 1e18) / 200e18; // Should be 0.1e18
-        
+
         // Alice's total expected: First reward (10) + (100 shares * 0.1 from second reward)
         uint256 expectedAliceTotalReward = 10e18 + ((100e18 * secondRewardPerShare) / 1e18);
         // Bob's expected: (100 shares * 0.1 from second reward only)
@@ -143,7 +137,7 @@ contract THJBeraTest is Test {
         uint256 aliceDeposit = 100e18;
         vm.prank(alice);
         uint256 sharesMinted = vault.deposit(aliceDeposit, alice);
-        
+
         assertEq(sharesMinted, aliceDeposit, "Shares should be 1:1 with deposit");
         assertEq(vault.balanceOf(alice), aliceDeposit);
         assertEq(vault.depositPrincipal(), aliceDeposit);
@@ -326,31 +320,31 @@ contract THJBeraTest is Test {
         // Alice deposits 100
         vm.prank(alice);
         vault.deposit(100e18, alice);
-        
+
         // First reward: 10 WBERA
         vm.prank(owner);
         vault.notifyRewardAmount(10e18);
-        
+
         // Bob deposits 100
         vm.prank(bob);
         vault.deposit(100e18, bob);
-        
+
         // Alice claims her first reward
         vm.prank(alice);
         vault.claimRewards();
-        
+
         // Second reward: 20 WBERA (split between Alice and Bob)
         vm.prank(owner);
         vault.notifyRewardAmount(20e18);
-        
+
         // Charlie deposits 200
         vm.prank(charlie);
         vault.deposit(200e18, charlie);
-        
+
         // Third reward: 30 WBERA (split between all three)
         vm.prank(owner);
         vault.notifyRewardAmount(40e18);
-        
+
         // Verify final reward states
         assertEq(vault.previewRewards(alice), 20e18, "Alice should have share of second and third rewards");
         assertEq(vault.previewRewards(bob), 20e18, "Bob should have all unclaimed rewards");
@@ -361,31 +355,31 @@ contract THJBeraTest is Test {
         // Alice deposits 100
         vm.prank(alice);
         vault.deposit(100e18, alice);
-        
+
         // Reward 1: 10 WBERA
         vm.prank(owner);
         vault.notifyRewardAmount(10e18);
-        
+
         // Bob deposits 200
         vm.prank(bob);
         vault.deposit(200e18, bob);
-        
+
         // Reward 2: 30 WBERA
         vm.prank(owner);
         vault.notifyRewardAmount(30e18);
-        
+
         // Alice claims
         vm.prank(alice);
         vault.claimRewards();
-        
+
         // Charlie deposits 300
         vm.prank(charlie);
         vault.deposit(300e18, charlie);
-        
+
         // Reward 3: 60 WBERA
         vm.prank(owner);
         vault.notifyRewardAmount(60e18);
-        
+
         // Verify complex reward distribution
         assertEq(vault.previewRewards(alice), 10e18, "Alice's new rewards after claim");
         assertEq(vault.previewRewards(bob), 40e18, "Bob's accumulated rewards");
@@ -398,31 +392,31 @@ contract THJBeraTest is Test {
         vault.deposit(100e18, alice);
         vm.prank(bob);
         vault.deposit(100e18, bob);
-        
+
         // First reward cycle
         vm.prank(owner);
         vault.notifyRewardAmount(20e18);
-        
+
         // Alice claims but Bob doesn't
         vm.prank(alice);
         vault.claimRewards();
-        
+
         // Second reward cycle
         vm.prank(owner);
         vault.notifyRewardAmount(10e18);
-        
+
         // Enable withdrawals
         vm.prank(owner);
         vault.unpause();
-        
+
         // Alice withdraws half
         vm.prank(alice);
         vault.withdraw(50e18, alice, alice);
-        
+
         // Third reward cycle
         vm.prank(owner);
         vault.notifyRewardAmount(30e18);
-        
+
         // Verify final states
         assertEq(vault.balanceOf(alice), 50e18, "Alice's remaining shares");
         assertEq(vault.balanceOf(bob), 100e18, "Bob's unchanged shares");
@@ -434,14 +428,14 @@ contract THJBeraTest is Test {
         // Try to notify reward with no deposits
         vm.prank(owner);
         vault.notifyRewardAmount(10e18);
-        
+
         // Alice deposits after failed reward
         vm.prank(alice);
         vault.deposit(100e18, alice);
-        
+
         // Verify no rewards from before deposit
         assertEq(vault.previewRewards(alice), 0, "Should have no rewards from before deposit");
-        
+
         // New reward should work
         vm.prank(owner);
         vault.notifyRewardAmount(10e18);
@@ -454,11 +448,11 @@ contract THJBeraTest is Test {
         vault.deposit(100e18, alice);
         vm.prank(bob);
         vault.deposit(200e18, bob);
-        
+
         // First reward
         vm.prank(owner);
         vault.notifyRewardAmount(30e18);
-        
+
         // bob balance before claim
         uint256 bobBalanceBefore = wbera.balanceOf(bob);
 
@@ -467,30 +461,30 @@ contract THJBeraTest is Test {
         vault.claimRewards();
 
         // verify bob received rewards
-        assertEq(wbera.balanceOf(bob) - bobBalanceBefore,20e18, "Bob should have received 20 WBERA");
-        
+        assertEq(wbera.balanceOf(bob) - bobBalanceBefore, 20e18, "Bob should have received 20 WBERA");
+
         // Charlie deposits
         vm.prank(charlie);
         vault.deposit(300e18, charlie);
-        
+
         // Second reward
         vm.prank(owner);
         vault.notifyRewardAmount(60e18);
-        
+
         // Enable withdrawals
         vm.prank(owner);
         vault.unpause();
-        
+
         // Record balances before withdrawals
         uint256 aliceBalanceBefore = wbera.balanceOf(alice);
         bobBalanceBefore = wbera.balanceOf(bob);
-        
+
         // Alice and Bob withdraw half
         vm.prank(alice);
         vault.withdraw(50e18, alice, alice);
         vm.prank(bob);
         vault.withdraw(100e18, bob, bob);
-        
+
         // Verify withdrawals include correct rewards
         assertEq(
             wbera.balanceOf(alice) - aliceBalanceBefore,
@@ -502,11 +496,11 @@ contract THJBeraTest is Test {
             120e18, // 100 principal + 20 reward
             "Bob's withdrawal amount incorrect"
         );
-        
+
         // Third reward
         vm.prank(owner);
         vault.notifyRewardAmount(90e18);
-        
+
         // Verify final reward state
         assertEq(vault.previewRewards(alice), 10e18, "Alice's new rewards");
         assertEq(vault.previewRewards(bob), 20e18, "Bob's new rewards");
@@ -519,19 +513,19 @@ contract THJBeraTest is Test {
         vault.deposit(100e18, alice);
         vm.prank(bob);
         vault.deposit(100e18, bob);
-        
+
         // Owner withdraws 150 for staking
         vm.prank(owner);
         vault.withdrawPrincipal(150e18, owner);
-        
+
         // Verify deposit principal reduced but shares unchanged
         assertEq(vault.depositPrincipal(), 50e18, "Deposit principal should be reduced");
         assertEq(vault.totalSupply(), 200e18, "Total supply should be unchanged");
-        
+
         // Add rewards (simulating staking returns)
         vm.prank(owner);
         vault.notifyRewardAmount(30e18);
-        
+
         // Verify rewards still work correctly
         assertEq(vault.previewRewards(alice), 15e18, "Alice's reward share");
         assertEq(vault.previewRewards(bob), 15e18, "Bob's reward share");
