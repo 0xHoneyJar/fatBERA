@@ -7,7 +7,7 @@ import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC2
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
-contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable {
+contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
     /*###############################################################
                             ERRORS
@@ -43,7 +43,7 @@ contract THJBera is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     ###############################################################*/
     function initialize(address _asset, address _owner, uint256 _maxDeposits) external initializer {
         __ERC4626_init(IERC20(_asset));
-        __ERC20_init("THJBera", "thjBERA");
+        __ERC20_init("fatBERA", "fatBERA");
         __Ownable_init(_owner);
 
         maxDeposits = _maxDeposits;
