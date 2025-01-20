@@ -2,12 +2,12 @@
 pragma solidity ^0.8.23;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {THJBera} from "../src/THJBera.sol";
+import {fatBERA} from "../src/fatBERA.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-contract THJBeraTest is Test {
-    THJBera public vault;
+contract fatBERATest is Test {
+    fatBERA public vault;
     MockERC20 public wbera;
     uint256 public maxDeposits = 1000000 ether;
     address public owner;
@@ -33,11 +33,11 @@ contract THJBeraTest is Test {
         wbera = new MockERC20("Wrapped BERA", "WBERA", 18);
 
         // Deploy implementation and proxy
-        THJBera implementation = new THJBera();
-        bytes memory initData = abi.encodeWithSelector(THJBera.initialize.selector, address(wbera), owner, maxDeposits);
+        fatBERA implementation = new fatBERA();
+        bytes memory initData = abi.encodeWithSelector(fatBERA.initialize.selector, address(wbera), owner, maxDeposits);
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
         address payable proxyPayable = payable(address(proxy));
-        vault = THJBera(proxyPayable);
+        vault = fatBERA(proxyPayable);
 
         // Mint initial WBERA to test accounts
         wbera.mint(alice, INITIAL_MINT);
@@ -534,7 +534,7 @@ contract THJBeraTest is Test {
     function test_MaxDeposits() public {
         // Try to deposit more than max
         vm.prank(alice);
-        vm.expectRevert(THJBera.ExceedsMaxDeposits.selector);
+        vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
         vault.deposit(maxDeposits + 1, alice);
 
         // Deposit up to max should work
@@ -543,14 +543,14 @@ contract THJBeraTest is Test {
 
         // Any further deposit should fail
         vm.prank(bob);
-        vm.expectRevert(THJBera.ExceedsMaxDeposits.selector);
+        vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
         vault.deposit(1, bob);
     }
 
     function test_MaxDepositsWithMint() public {
         // Try to mint shares that would require more than max deposits
         vm.prank(alice);
-        vm.expectRevert(THJBera.ExceedsMaxDeposits.selector);
+        vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
         vault.mint(maxDeposits + 1, alice);
 
         // Mint up to max should work
@@ -559,7 +559,7 @@ contract THJBeraTest is Test {
 
         // Any further mint should fail
         vm.prank(bob);
-        vm.expectRevert(THJBera.ExceedsMaxDeposits.selector);
+        vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
         vault.mint(1, bob);
     }
 
@@ -570,7 +570,7 @@ contract THJBeraTest is Test {
 
         // Try to set max deposits below current deposits
         vm.prank(owner);
-        vm.expectRevert(THJBera.InvalidMaxDeposits.selector);
+        vm.expectRevert(fatBERA.InvalidMaxDeposits.selector);
         vault.setMaxDeposits(400_000 ether);
 
         // Update max deposits to a higher value
@@ -583,7 +583,7 @@ contract THJBeraTest is Test {
 
         // But not exceed new max
         vm.prank(charlie);
-        vm.expectRevert(THJBera.ExceedsMaxDeposits.selector);
+        vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
         vault.deposit(600_000 ether, charlie);
     }
 
@@ -594,7 +594,7 @@ contract THJBeraTest is Test {
 
         // Second user tries to deposit slightly more than remaining
         vm.prank(bob);
-        vm.expectRevert(THJBera.ExceedsMaxDeposits.selector);
+        vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
         vault.deposit((maxDeposits / 2) + 1, bob);
 
         // Second user deposits exactly remaining amount
@@ -603,7 +603,7 @@ contract THJBeraTest is Test {
 
         // Third user can't deposit anything
         vm.prank(charlie);
-        vm.expectRevert(THJBera.ExceedsMaxDeposits.selector);
+        vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
         vault.deposit(1, charlie);
 
         // Verify total deposits
