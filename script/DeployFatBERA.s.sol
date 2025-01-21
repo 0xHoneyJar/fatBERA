@@ -55,11 +55,11 @@ contract DeployFatBERA is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Initialize the proxy
-        fatBERA(payable(proxyAddress)).initialize(WBERA);
+        fatBERA(payable(proxyAddress)).initialize(WBERA, deployer, maxDeposits);
         
         // Set max deposits and pause
-        fatBERA(payable(proxyAddress)).setMaxDeposits(maxDeposits);
-        fatBERA(payable(proxyAddress)).pause();
+        // fatBERA(payable(proxyAddress)).setMaxDeposits(maxDeposits);
+        // fatBERA(payable(proxyAddress)).pause();
 
         vm.stopBroadcast();
 
