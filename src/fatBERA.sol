@@ -12,7 +12,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /*###############################################################
                             ERRORS
     ###############################################################*/
-
     error ZeroPrincipal();
     error ExceedsPrincipal();
     error ZeroRewards();
@@ -21,7 +20,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /*###############################################################
                             STORAGE
     ###############################################################*/
-
     uint256 public lastTotalSupply;
     uint256 public depositPrincipal;
     uint256 public rewardPerShareStored;
@@ -37,7 +35,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     constructor() {
         _disableInitializers();
     }
-
     /*###############################################################
                             INITIALIZER
     ###############################################################*/

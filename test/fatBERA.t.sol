@@ -4,16 +4,17 @@ pragma solidity ^0.8.23;
 import {Test, console2} from "forge-std/Test.sol";
 import {fatBERA} from "../src/fatBERA.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract fatBERATest is Test {
+    uint256 public maxDeposits  = 1000000 ether;
+    address public owner        = makeAddr("owner");
+    address public alice        = makeAddr("alice");
+    address public bob          = makeAddr("bob");
+    address public charlie      = makeAddr("charlie");
+
     fatBERA public vault;
     MockERC20 public wbera;
-    uint256 public maxDeposits = 1000000 ether;
-    address public owner;
-    address public alice;
-    address public bob;
-    address public charlie;
 
     uint256 public constant INITIAL_MINT = 2000000 ether;
 
@@ -23,21 +24,12 @@ contract fatBERATest is Test {
     );
 
     function setUp() public {
-        // Setup accounts
-        owner = makeAddr("owner");
-        alice = makeAddr("alice");
-        bob = makeAddr("bob");
-        charlie = makeAddr("charlie");
-
         // Deploy mock WBERA
         wbera = new MockERC20("Wrapped BERA", "WBERA", 18);
 
         // Deploy implementation and proxy
-        fatBERA implementation = new fatBERA();
         bytes memory initData = abi.encodeWithSelector(fatBERA.initialize.selector, address(wbera), owner, maxDeposits);
-        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        address payable proxyPayable = payable(address(proxy));
-        vault = fatBERA(proxyPayable);
+        vault = fatBERA(payable(Upgrades.deployUUPSProxy("fatBERA.sol:fatBERA", initData)));
 
         // Mint initial WBERA to test accounts
         wbera.mint(alice, INITIAL_MINT);
