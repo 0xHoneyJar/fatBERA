@@ -8,7 +8,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 
 contract fatBERATest is Test {
     fatBERA public vault;
-    MockERC20 public wbera;
+    MockWBERA public wbera;
     uint256 public maxDeposits = 1000000 ether;
     address public owner;
     address public alice;
@@ -16,6 +16,7 @@ contract fatBERATest is Test {
     address public charlie;
 
     uint256 public constant INITIAL_MINT = 2000000 ether;
+    uint256 public constant INITIAL_DEPOSIT = 0 ether;
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
     event Withdraw(
@@ -29,15 +30,8 @@ contract fatBERATest is Test {
         bob = makeAddr("bob");
         charlie = makeAddr("charlie");
 
-        // Deploy mock WBERA
-        wbera = new MockERC20("Wrapped BERA", "WBERA", 18);
-
-        // Deploy implementation and proxy
-        fatBERA implementation = new fatBERA();
-        bytes memory initData = abi.encodeWithSelector(fatBERA.initialize.selector, address(wbera), owner, maxDeposits);
-        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        address payable proxyPayable = payable(address(proxy));
-        vault = fatBERA(proxyPayable);
+        // Deploy mock WBERA with native BERA handling
+        wbera = new MockWBERA("Wrapped BERA", "WBERA", 18);
 
         // Mint initial WBERA to test accounts
         wbera.mint(alice, INITIAL_MINT);
@@ -45,7 +39,32 @@ contract fatBERATest is Test {
         wbera.mint(charlie, INITIAL_MINT);
         wbera.mint(owner, INITIAL_MINT);
 
-        // Approve vault to spend WBERA
+        // Deploy implementation
+        fatBERA implementation = new fatBERA();
+
+        // Deploy proxy with empty initialization data
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(implementation),
+            "" // Empty initialization data
+        );
+        vault = fatBERA(payable(address(proxy)));
+
+        // Mint WBERA to this contract for initialization
+        wbera.mint(address(this), INITIAL_DEPOSIT);
+
+        // Approve vault to spend WBERA for initial deposit
+        wbera.approve(address(vault), INITIAL_DEPOSIT);
+
+        // Initialize the vault with value
+        vm.deal(address(this), INITIAL_DEPOSIT);
+        vault.initialize{value: INITIAL_DEPOSIT}(
+            address(wbera),
+            owner,
+            maxDeposits,
+            INITIAL_DEPOSIT
+        );
+
+        // Approve vault to spend WBERA for test accounts
         vm.prank(alice);
         wbera.approve(address(vault), type(uint256).max);
         vm.prank(bob);
@@ -56,13 +75,14 @@ contract fatBERATest is Test {
         wbera.approve(address(vault), type(uint256).max);
     }
 
-    function test_Initialize() public view {
+    function test_Initialize() public {
         assertEq(vault.owner(), owner);
         assertEq(address(vault.asset()), address(wbera));
         assertEq(vault.paused(), true);
         assertEq(vault.rewardPerShareStored(), 0);
         assertEq(vault.lastTotalSupply(), 0);
-        assertEq(vault.depositPrincipal(), 0);
+        assertEq(vault.depositPrincipal(), INITIAL_DEPOSIT);
+        assertEq(wbera.balanceOf(address(vault)), INITIAL_DEPOSIT);
     }
 
     function test_DepositWhenPaused() public {
@@ -608,5 +628,24 @@ contract fatBERATest is Test {
 
         // Verify total deposits
         assertEq(vault.depositPrincipal(), maxDeposits, "Total deposits should equal max");
+    }
+}
+
+// Mock WBERA that can accept native BERA deposits
+contract MockWBERA is MockERC20 {
+    constructor(string memory name_, string memory symbol_, uint8 decimals_) 
+        MockERC20(name_, symbol_, decimals_) {}
+
+    receive() external payable {
+        _mint(msg.sender, msg.value);
+    }
+
+    function deposit() external payable {
+        _mint(msg.sender, msg.value);
+    }
+
+    function withdraw(uint256 amount) external {
+        _burn(msg.sender, amount);
+        payable(msg.sender).transfer(amount);
     }
 }

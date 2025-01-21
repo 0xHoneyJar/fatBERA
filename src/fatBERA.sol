@@ -2,12 +2,15 @@
 pragma solidity ^0.8.23;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
+import {ERC4626UpgradeableSafe} from "./ERC4626UpgradeableSafe.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {IWBERA} from "./interfaces/IWBERA.sol";
 
-contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable {
+contract fatBERA is ERC4626UpgradeableSafe, OwnableUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
     /*###############################################################
                             ERRORS
@@ -18,6 +21,8 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     error ZeroRewards();
     error ExceedsMaxDeposits();
     error InvalidMaxDeposits();
+    error ZeroAddress();
+    error DepositFailed();
     /*###############################################################
                             STORAGE
     ###############################################################*/
@@ -41,12 +46,23 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /*###############################################################
                             INITIALIZER
     ###############################################################*/
-    function initialize(address _asset, address _owner, uint256 _maxDeposits) external initializer {
-        __ERC4626_init(IERC20(_asset));
-        __ERC20_init("fatBERA", "fatBERA");
-        __Ownable_init(_owner);
+    function initialize(address _asset, address _owner, uint256 _maxDeposits, uint256 _initialDeposit) external payable initializer {
+        if (_asset == address(0) || _owner == address(0)) revert ZeroAddress();
+        if (msg.value != _initialDeposit) revert DepositFailed();
+        if (_initialDeposit > _maxDeposits) revert ExceedsMaxDeposits();
+        
+        // Then initialize the rest of the contracts in the correct order
+        __ERC20_init_unchained("fatBERA", "fatBERA");
+        __Ownable_init_unchained(_owner);
+        __Pausable_init_unchained();
 
+        // Set max deposits before initial deposit
         maxDeposits = _maxDeposits;
+
+        // Convert native BERA to WBERA for initial deposit
+        IWBERA(_asset).deposit{value: _initialDeposit}();
+        __ERC4626UpgradeableSafe_init(IERC20Metadata(_asset), _initialDeposit);
+
         _pause();
     }
 

@@ -6,7 +6,22 @@ VERIFIER_URL="https://api.routescan.io/v2/network/testnet/evm/80084/etherscan"
 CHAIN_ID=80084
 ETHERSCAN_KEY="verifyContract"
 WBERA="0x7507c1dc16935B82698e4C63f2746A2fCf994dF8"
+INITIAL_DEPOSIT="10000000000000000000" # 10 ether
+MAX_DEPOSITS="10000000000000000000000000" # 10M ether
 
+# # Check if we have enough BERA for deployment
+# echo "🔍 Checking BERA balance..."
+# DEPLOYER_ADDRESS=$(cast wallet address --private-key "$PRIVATE_KEY")
+# BALANCE=$(cast balance "$DEPLOYER_ADDRESS" --rpc-url "$RPC_URL")
+# MIN_REQUIRED="20000000000000000000" # 20 BERA for deployment + initial deposit
+
+# if [ -z "$BALANCE" ] || [ "$BALANCE" -lt "$MIN_REQUIRED" ]; then
+#     echo "❌ Insufficient BERA balance. Need at least 20 BERA for deployment and initial deposit."
+#     echo "Current balance: $BALANCE wei"
+#     exit 1
+# fi
+
+echo "✅ BERA balance sufficient for deployment"
 echo "🚀 Starting deployment process..."
 
 # 1. Deploy Implementation
@@ -63,7 +78,8 @@ forge script script/DeployFatBERA.s.sol:DeployFatBERA --sig "initializeProxy(add
 echo "🔍 Verifying proxy contract..."
 OWNER_ADDRESS=$ADMIN_ADDRESS # Since we're using the admin as the owner
 
-CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address,address,bytes)" "$IMPLEMENTATION_ADDRESS" "$ADMIN_ADDRESS" $(cast calldata "initialize(address)" "$OWNER_ADDRESS"))
+# Update constructor args to include the initial deposit
+CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address,address,bytes)" "$IMPLEMENTATION_ADDRESS" "$ADMIN_ADDRESS" $(cast calldata "initialize(address,address,uint256,uint256)" "$WBERA" "$OWNER_ADDRESS" "$MAX_DEPOSITS" "$INITIAL_DEPOSIT"))
 
 forge verify-contract $PROXY_ADDRESS src/fatBERAProxy.sol:fatBERAProxy \
     --constructor-args $CONSTRUCTOR_ARGS \
@@ -76,4 +92,6 @@ echo "🎉 Deployment and verification complete!"
 echo "Implementation: $IMPLEMENTATION_ADDRESS"
 echo "Proxy: $PROXY_ADDRESS"
 echo "Admin: $ADMIN_ADDRESS"
-echo "Owner: $OWNER_ADDRESS" 
+echo "Owner: $OWNER_ADDRESS"
+echo "Initial Deposit: $INITIAL_DEPOSIT"
+echo "Max Deposits: $MAX_DEPOSITS" 

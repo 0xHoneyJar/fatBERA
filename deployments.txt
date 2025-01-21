@@ -6,7 +6,7 @@ Shell script to run all the below commands in order:
 ./script/deploy.sh
 
 # Step 1: Deploy and verify implementation
-forge script script/DeployFatBERA.s.sol:DeployFatBERA --sig "deployImplementation()" \
+forge script script/DeployFatBERA.s.sol:DeployFatBERA \
 --rpc-url https://bartio.rpc.berachain.com \
 --broadcast \
 --verify \
