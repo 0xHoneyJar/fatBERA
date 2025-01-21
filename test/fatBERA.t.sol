@@ -18,11 +18,6 @@ contract fatBERATest is Test {
 
     uint256 public constant INITIAL_MINT = 2000000 ether;
 
-    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
-    event Withdraw(
-        address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares
-    );
-
     function setUp() public {
         // Deploy mock WBERA
         wbera = new MockERC20("Wrapped BERA", "WBERA", 18);
@@ -53,7 +48,6 @@ contract fatBERATest is Test {
         assertEq(address(vault.asset()), address(wbera));
         assertEq(vault.paused(), true);
         assertEq(vault.rewardPerShareStored(), 0);
-        assertEq(vault.lastTotalSupply(), 0);
         assertEq(vault.depositPrincipal(), 0);
     }
 
