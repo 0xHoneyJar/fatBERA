@@ -1,0 +1,73 @@
+{
+  "transactions": [
+    {
+      "hash": null,
+      "transactionType": "CALL",
+      "contractName": null,
+      "contractAddress": "0xbd9ebcd92276717238a2ff5551ea46fd5bc07f6c",
+      "function": "initialize(address,address)",
+      "arguments": [
+        "0x7507c1dc16935B82698e4C63f2746A2fCf994dF8",
+        "0xD5cC24cA0C1d222cb143d0D8D02258f1e3994E60"
+      ],
+      "transaction": {
+        "from": "0xd5cc24ca0c1d222cb143d0d8d02258f1e3994e60",
+        "to": "0xbd9ebcd92276717238a2ff5551ea46fd5bc07f6c",
+        "gas": "0x55aab61d",
+        "value": "0x0",
+        "input": "0x485cc9550000000000000000000000007507c1dc16935b82698e4c63f2746a2fcf994df8000000000000000000000000d5cc24ca0c1d222cb143d0d8d02258f1e3994e60",
+        "nonce": "0x588",
+        "chainId": "0x138d4"
+      },
+      "additionalContracts": [],
+      "isFixedGasLimit": false
+    },
+    {
+      "hash": null,
+      "transactionType": "CALL",
+      "contractName": null,
+      "contractAddress": "0xbd9ebcd92276717238a2ff5551ea46fd5bc07f6c",
+      "function": "setMaxDeposits(uint256)",
+      "arguments": [
+        "10000000000000000000000000"
+      ],
+      "transaction": {
+        "from": "0xd5cc24ca0c1d222cb143d0d8d02258f1e3994e60",
+        "to": "0xbd9ebcd92276717238a2ff5551ea46fd5bc07f6c",
+        "gas": "0x12df8",
+        "value": "0x0",
+        "input": "0x00fed902000000000000000000000000000000000000000000084595161401484a000000",
+        "nonce": "0x589",
+        "chainId": "0x138d4"
+      },
+      "additionalContracts": [],
+      "isFixedGasLimit": false
+    },
+    {
+      "hash": null,
+      "transactionType": "CALL",
+      "contractName": null,
+      "contractAddress": "0xbd9ebcd92276717238a2ff5551ea46fd5bc07f6c",
+      "function": "pause()",
+      "arguments": [],
+      "transaction": {
+        "from": "0xd5cc24ca0c1d222cb143d0d8d02258f1e3994e60",
+        "to": "0xbd9ebcd92276717238a2ff5551ea46fd5bc07f6c",
+        "gas": "0x12840",
+        "value": "0x0",
+        "input": "0x8456cb59",
+        "nonce": "0x58a",
+        "chainId": "0x138d4"
+      },
+      "additionalContracts": [],
+      "isFixedGasLimit": false
+    }
+  ],
+  "receipts": [],
+  "libraries": [],
+  "pending": [],
+  "returns": {},
+  "timestamp": 1737426694,
+  "chain": 80084,
+  "commit": "6aa5182"
+}
