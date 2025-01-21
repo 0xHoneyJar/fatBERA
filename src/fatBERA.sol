@@ -20,7 +20,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /*###############################################################
                             STORAGE
     ###############################################################*/
-    uint256 public lastTotalSupply;
     uint256 public depositPrincipal;
     uint256 public rewardPerShareStored;
     uint256 public maxDeposits;
@@ -94,8 +93,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         if (totalSharesCurrent > 0) {
             rewardPerShareStored += (rewardAmount * 1e18) / totalSharesCurrent;
         }
-
-        lastTotalSupply = totalSharesCurrent;
     }
 
     /*###############################################################
@@ -119,7 +116,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         _updateRewards(receiver);
 
         uint256 sharesMinted = super.deposit(assets, receiver);
-        lastTotalSupply = totalSupply();
         depositPrincipal += assets;
 
         return sharesMinted;
@@ -136,7 +132,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         if (depositPrincipal + assetsRequired > maxDeposits) revert ExceedsMaxDeposits();
 
         assetsRequired = super.mint(shares, receiver);
-        lastTotalSupply = totalSupply();
         depositPrincipal += assetsRequired;
 
         return assetsRequired;
@@ -156,7 +151,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         claimRewards();
 
         uint256 burnedShares = super.withdraw(assets, receiver, owner);
-        lastTotalSupply = totalSupply();
         depositPrincipal -= assets;
 
         return burnedShares;
@@ -169,7 +163,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         claimRewards();
 
         uint256 redeemedAssets = super.redeem(shares, receiver, owner);
-        lastTotalSupply = totalSupply();
         depositPrincipal -= redeemedAssets;
 
         return redeemedAssets;
