@@ -6,9 +6,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 
 contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
+    using FixedPointMathLib for uint256;
     /*###############################################################
                             ERRORS
     ###############################################################*/
@@ -84,14 +86,14 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *      that new reward tokens have arrived. This increments "rewardPerShareStored"
      *      proportionally to the total shares in existence.
      */
-    function notifyRewardAmount(uint256 rewardAmount) external onlyOwner {
+    function depositRewardAmount(uint256 rewardAmount) external onlyOwner {
         if (rewardAmount <= 0) revert ZeroRewards();
 
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), rewardAmount);
 
         uint256 totalSharesCurrent = totalSupply();
         if (totalSharesCurrent > 0) {
-            rewardPerShareStored += (rewardAmount * 1e18) / totalSharesCurrent;
+            rewardPerShareStored += FixedPointMathLib.fullMulDiv(rewardAmount, 1e18, totalSharesCurrent);
         }
     }
 
@@ -202,7 +204,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         uint256 accountShares = balanceOf(account);
         if (accountShares > 0) {
             uint256 earnedPerShare = _rewardPerShare - userRewardPerSharePaid[account];
-            rewards[account] += (accountShares * earnedPerShare) / 1e18;
+            rewards[account] += FixedPointMathLib.fullMulDiv(accountShares, earnedPerShare, 1e18);
         }
 
         userRewardPerSharePaid[account] = _rewardPerShare;
