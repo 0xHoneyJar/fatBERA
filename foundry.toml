@@ -10,10 +10,10 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/",
     "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/"
 ]
-build_info = true
-extra_output = ["storageLayout"]
 ffi = true
 ast = true
+build_info = true
+extra_output = ["storageLayout"]
 
 [rpc_endpoints]
 bArtio = "https://bartio.rpc.berachain.com/"
