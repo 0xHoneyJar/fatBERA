@@ -5,6 +5,7 @@ import {Test, console2} from "forge-std/Test.sol";
 import {fatBERA} from "../src/fatBERA.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 
 contract fatBERATest is Test {
     uint256 public maxDeposits  = 1000000 ether;
@@ -642,5 +643,172 @@ contract fatBERATest is Test {
 
         // Verify total deposits
         assertEq(vault.depositPrincipal(), maxDeposits, "Total deposits should equal max");
+    }
+
+    // Fuzz Tests
+    function testFuzz_Deposit(uint256 amount) public {
+        // Bound amount between 1 and maxDeposits to avoid unrealistic values
+        amount = bound(amount, 1, maxDeposits);
+        
+        vm.prank(alice);
+        uint256 sharesMinted = vault.deposit(amount, alice);
+
+        assertEq(sharesMinted, amount, "Shares minted should equal deposit amount");
+        assertEq(vault.balanceOf(alice), amount, "Balance should equal deposit");
+        assertEq(vault.depositPrincipal(), amount, "Principal should equal deposit");
+    }
+
+    function testFuzz_DepositWithExistingBalance(uint256 firstAmount, uint256 secondAmount) public {
+        // Bound amounts to avoid overflow and unrealistic values
+        firstAmount = bound(firstAmount, 1, maxDeposits / 2);
+        secondAmount = bound(secondAmount, 1, maxDeposits - firstAmount);
+
+        // First deposit
+        vm.prank(alice);
+        vault.deposit(firstAmount, alice);
+
+        // Second deposit
+        vm.prank(alice);
+        vault.deposit(secondAmount, alice);
+
+        assertEq(vault.balanceOf(alice), firstAmount + secondAmount, "Total balance incorrect");
+        assertEq(vault.depositPrincipal(), firstAmount + secondAmount, "Total principal incorrect");
+    }
+
+    function testFuzz_Mint(uint256 shares) public {
+        // Bound shares between 1 and maxDeposits
+        shares = bound(shares, 1, maxDeposits);
+
+        vm.prank(alice);
+        uint256 assets = vault.mint(shares, alice);
+
+        assertEq(assets, shares, "Assets should equal shares for 1:1 ratio");
+        assertEq(vault.balanceOf(alice), shares, "Balance should equal minted shares");
+        assertEq(vault.depositPrincipal(), assets, "Principal should equal assets");
+    }
+
+    function testFuzz_WithdrawPartial(uint256 depositAmount, uint256 withdrawAmount) public {
+        // Bound deposit amount between 2 and maxDeposits
+        depositAmount = bound(depositAmount, 2, maxDeposits);
+        // Bound withdraw amount between 1 and deposit amount
+        withdrawAmount = bound(withdrawAmount, 1, depositAmount);
+
+        // Enable withdrawals
+        vm.prank(owner);
+        vault.unpause();
+
+        // Deposit
+        vm.prank(alice);
+        vault.deposit(depositAmount, alice);
+
+        // Withdraw
+        vm.prank(alice);
+        uint256 sharesBurned = vault.withdraw(withdrawAmount, alice, alice);
+
+        assertEq(sharesBurned, withdrawAmount, "Shares burned should equal withdrawal");
+        assertEq(vault.balanceOf(alice), depositAmount - withdrawAmount, "Remaining balance incorrect");
+        assertEq(vault.depositPrincipal(), depositAmount - withdrawAmount, "Remaining principal incorrect");
+    }
+
+    function testFuzz_RedeemPartial(uint256 depositAmount, uint256 redeemShares) public {
+        // Bound deposit amount between 2 and maxDeposits
+        depositAmount = bound(depositAmount, 2, maxDeposits);
+        // Bound redeem shares between 1 and deposit amount
+        redeemShares = bound(redeemShares, 1, depositAmount);
+
+        // Enable withdrawals
+        vm.prank(owner);
+        vault.unpause();
+
+        // Deposit
+        vm.prank(alice);
+        vault.deposit(depositAmount, alice);
+
+        // Redeem
+        vm.prank(alice);
+        uint256 assetsReceived = vault.redeem(redeemShares, alice, alice);
+
+        assertEq(assetsReceived, redeemShares, "Assets received should equal shares for 1:1 ratio");
+        assertEq(vault.balanceOf(alice), depositAmount - redeemShares, "Remaining balance incorrect");
+        assertEq(vault.depositPrincipal(), depositAmount - redeemShares, "Remaining principal incorrect");
+    }
+
+    function testFuzz_NotifyRewardAmount(uint256 depositAmount, uint256 rewardAmount) public {
+        // Bound deposit amount between 1 and maxDeposits
+        depositAmount = bound(depositAmount, 1, maxDeposits);
+        // Bound reward amount between 1 and maxDeposits (reasonable range for rewards)
+        rewardAmount = bound(rewardAmount, 1, maxDeposits);
+
+        // Initial deposit
+        vm.prank(alice);
+        vault.deposit(depositAmount, alice);
+
+        // Add reward
+        vm.prank(owner);
+        wbera.transfer(address(vault), rewardAmount);
+        vm.prank(owner);
+        vault.notifyRewardAmount(rewardAmount);
+
+        // Record balance before claim
+        uint256 balanceBefore = wbera.balanceOf(alice);
+
+        // Claim rewards
+        vm.prank(alice);
+        vault.claimRewards();
+
+        // Verify actual rewards received (allow for small rounding differences)
+        uint256 rewardsReceived = wbera.balanceOf(alice) - balanceBefore;
+        assertApproxEqAbs(rewardsReceived, rewardAmount, 1, "Reward amount received should be approximately equal");
+    }
+
+    function testFuzz_MultiUserRewardDistribution(
+        uint256 aliceDeposit,
+        uint256 bobDeposit,
+        uint256 rewardAmount
+    ) public {
+        // Bound deposits to avoid overflow and unrealistic values
+        aliceDeposit = bound(aliceDeposit, 1, maxDeposits / 2);
+        bobDeposit = bound(bobDeposit, 1, maxDeposits - aliceDeposit);
+        // Bound reward to a reasonable range
+        rewardAmount = bound(rewardAmount, 1, maxDeposits);
+
+        // Alice and Bob deposit
+        vm.prank(alice);
+        vault.deposit(aliceDeposit, alice);
+        vm.prank(bob);
+        vault.deposit(bobDeposit, bob);
+
+        // Add reward
+        vm.prank(owner);
+        wbera.transfer(address(vault), rewardAmount);
+        vm.prank(owner);
+        vault.notifyRewardAmount(rewardAmount);
+
+        // Calculate expected rewards using the same mulDiv logic as the contract
+        uint256 totalDeposits = aliceDeposit + bobDeposit;
+        uint256 expectedAliceReward = FixedPointMathLib.mulDiv(rewardAmount, aliceDeposit, totalDeposits);
+        uint256 expectedBobReward = FixedPointMathLib.mulDiv(rewardAmount, bobDeposit, totalDeposits);
+
+        // Record balances before claims
+        uint256 aliceBalanceBefore = wbera.balanceOf(alice);
+        uint256 bobBalanceBefore = wbera.balanceOf(bob);
+
+        // Claim rewards
+        vm.prank(alice);
+        vault.claimRewards();
+        vm.prank(bob);
+        vault.claimRewards();
+
+        // Verify actual rewards received (allow for small rounding differences)
+        uint256 aliceRewardsReceived = wbera.balanceOf(alice) - aliceBalanceBefore;
+        uint256 bobRewardsReceived = wbera.balanceOf(bob) - bobBalanceBefore;
+
+        // Verify rewards are approximately equal to expected amounts
+        assertApproxEqAbs(aliceRewardsReceived, expectedAliceReward, 1, "Alice rewards should be approximately equal to expected");
+        assertApproxEqAbs(bobRewardsReceived, expectedBobReward, 1, "Bob rewards should be approximately equal to expected");
+        
+        // Verify total rewards distributed are approximately equal to input amount
+        uint256 totalRewardsReceived = aliceRewardsReceived + bobRewardsReceived;
+        assertApproxEqAbs(totalRewardsReceived, rewardAmount, 1, "Total rewards should be approximately equal to reward amount");
     }
 }
