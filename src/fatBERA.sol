@@ -196,7 +196,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         uint256 earnedPerShare = _rewardPerShare - userRewardPerSharePaid[account];
         uint256 accountShares = balanceOf(account);
 
-        return rewards[account] + ((accountShares * earnedPerShare) / 1e18);
+        return rewards[account] + FixedPointMathLib.mulDiv(accountShares, earnedPerShare, 1e18);
     }
 
     /*###############################################################
@@ -209,7 +209,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         uint256 accountShares = balanceOf(account);
         if (accountShares > 0) {
             uint256 earnedPerShare = _rewardPerShare - userRewardPerSharePaid[account];
-            rewards[account] += FixedPointMathLib.fullMulDiv(accountShares, earnedPerShare, 1e18);
+            rewards[account] += FixedPointMathLib.mulDiv(accountShares, earnedPerShare, 1e18);
         }
 
         userRewardPerSharePaid[account] = _rewardPerShare;
