@@ -2,42 +2,24 @@
                 DEPLOY COMMANDS
 ###############################################
 
-Shell script to run all the below commands in order:
-./script/deploy.sh
-
-# Step 1: Deploy and verify implementation
-forge script script/DeployFatBERA.s.sol:DeployFatBERA \
---rpc-url https://bartio.rpc.berachain.com \
+source .env && forge script script/DeployFatBERA.s.sol:DeployFatBERA  \
+--rpc-url http://141.95.85.219:8545/ \
 --broadcast \
 --verify \
 --verifier-url https://api.routescan.io/v2/network/testnet/evm/80084/etherscan \
 --etherscan-api-key verifyContract \
---chain-id 80084
+--chain-id 80084 --slow --force
 
-# Step 2: Deploy proxy (replace IMPLEMENTATION_ADDRESS with the address from step 1)
-forge script script/DeployFatBERA.s.sol:DeployFatBERA --sig "deployProxy(address)" 0x8E768F073a18bBF7981e7a5d9cD72F3Bd477f0F3 \
---rpc-url https://bartio.rpc.berachain.com \
+source .env && forge script script/DeployFatBERA.s.sol:DeployFatBERA \
+--rpc-url http://141.95.85.219:8545/ \
 --broadcast \
 --verify \
 --verifier-url https://api.routescan.io/v2/network/testnet/evm/80084/etherscan \
 --etherscan-api-key verifyContract \
---chain-id 80084
-
-# Step 3: Initialize proxy (replace PROXY_ADDRESS with the address from step 2)
-forge script script/DeployFatBERA.s.sol:DeployFatBERA --sig "initializeProxy(address)" 0x6A842fe5DC524a05015F366055748ff7EB1B95d3 \
---rpc-url https://bartio.rpc.berachain.com \
---broadcast \
---verify \
---verifier-url https://api.routescan.io/v2/network/testnet/evm/80084/etherscan \
---etherscan-api-key verifyContract \
---chain-id 80084
-
-# Optional: Verify implementation contract separately if needed
-forge verify-contract 0x8E768F073a18bBF7981e7a5d9cD72F3Bd477f0F3 src/fatBERA.sol:fatBERA \
---verifier-url https://api.routescan.io/v2/network/testnet/evm/80084/etherscan \
---etherscan-api-key verifyContract \
---watch \
---chain-id 80084
+--chain-id 80084 \
+--slow \
+--force \
+--skip-simulation
 
 ###############################################
                   DEPLOYMENTS
