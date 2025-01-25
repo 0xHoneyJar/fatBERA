@@ -77,9 +77,10 @@ contract fatBERATest is Test {
         vault.deposit(100e18, alice);
 
         // First reward: 10 WBERA
-        // With 100 total shares, each share should get 0.1 WBERA (or 0.1e18 in raw units)
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Manual calculation for first reward
         uint256 expectedRewardPerShare = (10e18 * 1e18) / 100e18; // Should be 0.1e18
@@ -94,9 +95,10 @@ contract fatBERATest is Test {
         vault.deposit(100e18, bob);
 
         // Second reward: 20 WBERA
-        // With 200 total shares, each share should get 0.1 WBERA
         vm.prank(owner);
-        vault.depositRewardAmount(20e18);
+        wbera.transfer(address(vault), 20e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(20e18);
 
         // Manual calculation for second reward
         uint256 secondRewardPerShare = (20e18 * 1e18) / 200e18; // Should be 0.1e18
@@ -133,7 +135,9 @@ contract fatBERATest is Test {
         // Owner notifies 10 WBERA as reward
         uint256 rewardAmount = 10e18;
         vm.prank(owner);
-        vault.depositRewardAmount(rewardAmount);
+        wbera.transfer(address(vault), rewardAmount);
+        vm.prank(owner);
+        vault.notifyRewardAmount(rewardAmount);
 
         // Check Alice's claimable rewards
         assertEq(vault.previewRewards(alice), rewardAmount, "All rewards should go to Alice");
@@ -149,7 +153,9 @@ contract fatBERATest is Test {
 
         // Owner adds 10 WBERA reward
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Bob deposits 100 WBERA
         vm.prank(bob);
@@ -157,7 +163,9 @@ contract fatBERATest is Test {
 
         // Owner adds another 10 WBERA reward
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Check rewards
         assertEq(vault.previewRewards(alice), 15e18, "Alice should have first reward + half of second");
@@ -174,7 +182,9 @@ contract fatBERATest is Test {
 
         // Add reward
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Record balance before claim
         uint256 balanceBefore = wbera.balanceOf(alice);
@@ -217,7 +227,9 @@ contract fatBERATest is Test {
 
         // Add reward
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Record balance before withdrawal
         uint256 balanceBefore = wbera.balanceOf(alice);
@@ -242,7 +254,9 @@ contract fatBERATest is Test {
 
         // Add reward
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Record balance before redeem
         uint256 balanceBefore = wbera.balanceOf(alice);
@@ -287,7 +301,9 @@ contract fatBERATest is Test {
 
         // First reward cycle
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Alice claims
         vm.prank(alice);
@@ -295,7 +311,9 @@ contract fatBERATest is Test {
 
         // Second reward cycle
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Verify rewards
         assertEq(vault.previewRewards(alice), 5e18, "Alice should have half of second reward");
@@ -309,7 +327,9 @@ contract fatBERATest is Test {
 
         // First reward: 10 WBERA
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Bob deposits 100
         vm.prank(bob);
@@ -321,7 +341,9 @@ contract fatBERATest is Test {
 
         // Second reward: 20 WBERA (split between Alice and Bob)
         vm.prank(owner);
-        vault.depositRewardAmount(20e18);
+        wbera.transfer(address(vault), 20e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(20e18);
 
         // Charlie deposits 200
         vm.prank(charlie);
@@ -329,7 +351,9 @@ contract fatBERATest is Test {
 
         // Third reward: 30 WBERA (split between all three)
         vm.prank(owner);
-        vault.depositRewardAmount(40e18);
+        wbera.transfer(address(vault), 40e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(40e18);
 
         // Verify final reward states
         assertEq(vault.previewRewards(alice), 20e18, "Alice should have share of second and third rewards");
@@ -344,7 +368,9 @@ contract fatBERATest is Test {
 
         // Reward 1: 10 WBERA
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Bob deposits 200
         vm.prank(bob);
@@ -352,7 +378,9 @@ contract fatBERATest is Test {
 
         // Reward 2: 30 WBERA
         vm.prank(owner);
-        vault.depositRewardAmount(30e18);
+        wbera.transfer(address(vault), 30e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(30e18);
 
         // Alice claims
         vm.prank(alice);
@@ -364,7 +392,9 @@ contract fatBERATest is Test {
 
         // Reward 3: 60 WBERA
         vm.prank(owner);
-        vault.depositRewardAmount(60e18);
+        wbera.transfer(address(vault), 60e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(60e18);
 
         // Verify complex reward distribution
         assertEq(vault.previewRewards(alice), 10e18, "Alice's new rewards after claim");
@@ -381,7 +411,9 @@ contract fatBERATest is Test {
 
         // First reward cycle
         vm.prank(owner);
-        vault.depositRewardAmount(20e18);
+        wbera.transfer(address(vault), 20e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(20e18);
 
         // Alice claims but Bob doesn't
         vm.prank(alice);
@@ -389,7 +421,9 @@ contract fatBERATest is Test {
 
         // Second reward cycle
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Enable withdrawals
         vm.prank(owner);
@@ -401,7 +435,9 @@ contract fatBERATest is Test {
 
         // Third reward cycle
         vm.prank(owner);
-        vault.depositRewardAmount(30e18);
+        wbera.transfer(address(vault), 30e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(30e18);
 
         // Verify final states
         assertEq(vault.balanceOf(alice), 50e18, "Alice's remaining shares");
@@ -410,10 +446,12 @@ contract fatBERATest is Test {
         assertEq(vault.previewRewards(bob), 35e18, "Bob's total unclaimed rewards");
     }
 
-    function test_RewardsWithZeroTotalSupply() public {
+    function test_notifyRewardAmount() public {
         // Try to notify reward with no deposits
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
 
         // Alice deposits after failed reward
         vm.prank(alice);
@@ -424,7 +462,9 @@ contract fatBERATest is Test {
 
         // New reward should work
         vm.prank(owner);
-        vault.depositRewardAmount(10e18);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(10e18);
         assertEq(vault.previewRewards(alice), 10e18, "Should receive new rewards");
     }
 
@@ -437,7 +477,9 @@ contract fatBERATest is Test {
 
         // First reward
         vm.prank(owner);
-        vault.depositRewardAmount(30e18);
+        wbera.transfer(address(vault), 30e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(30e18);
 
         // bob balance before claim
         uint256 bobBalanceBefore = wbera.balanceOf(bob);
@@ -455,7 +497,9 @@ contract fatBERATest is Test {
 
         // Second reward
         vm.prank(owner);
-        vault.depositRewardAmount(60e18);
+        wbera.transfer(address(vault), 60e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(60e18);
 
         // Enable withdrawals
         vm.prank(owner);
@@ -485,7 +529,9 @@ contract fatBERATest is Test {
 
         // Third reward
         vm.prank(owner);
-        vault.depositRewardAmount(90e18);
+        wbera.transfer(address(vault), 90e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(90e18);
 
         // Verify final reward state
         assertEq(vault.previewRewards(alice), 10e18, "Alice's new rewards");
@@ -510,7 +556,9 @@ contract fatBERATest is Test {
 
         // Add rewards (simulating staking returns)
         vm.prank(owner);
-        vault.depositRewardAmount(30e18);
+        wbera.transfer(address(vault), 30e18);
+        vm.prank(owner);
+        vault.notifyRewardAmount(30e18);
 
         // Verify rewards still work correctly
         assertEq(vault.previewRewards(alice), 15e18, "Alice's reward share");

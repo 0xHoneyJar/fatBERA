@@ -19,6 +19,11 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     error ZeroRewards();
     error ExceedsMaxDeposits();
     error InvalidMaxDeposits();
+    error ExceedsAvailableRewards();
+    /*###############################################################
+                            EVENTS
+    ###############################################################*/
+    event RewardAdded(uint256 rewardAmount);
     /*###############################################################
                             STORAGE
     ###############################################################*/
@@ -86,15 +91,15 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *      that new reward tokens have arrived. This increments "rewardPerShareStored"
      *      proportionally to the total shares in existence.
      */
-    function depositRewardAmount(uint256 rewardAmount) external onlyOwner {
+    function notifyRewardAmount(uint256 rewardAmount) external onlyOwner {
         if (rewardAmount <= 0) revert ZeroRewards();
-
-        IERC20(asset()).safeTransferFrom(msg.sender, address(this), rewardAmount);
+        if (rewardAmount > IERC20(asset()).balanceOf(address(this))) revert ExceedsAvailableRewards();
 
         uint256 totalSharesCurrent = totalSupply();
         if (totalSharesCurrent > 0) {
             rewardPerShareStored += FixedPointMathLib.fullMulDiv(rewardAmount, 1e18, totalSharesCurrent);
         }
+        emit RewardAdded(rewardAmount);
     }
 
     /*###############################################################
