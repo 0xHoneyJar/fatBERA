@@ -20,19 +20,31 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     error ExceedsMaxDeposits();
     error InvalidMaxDeposits();
     error ExceedsAvailableRewards();
+    error InvalidToken();
+    /*###############################################################
+                            STRUCTS
+    ###############################################################*/
+    struct RewardData {
+        uint256 rewardPerShareStored;
+        uint256 totalRewards;
+    }
     /*###############################################################
                             EVENTS
     ###############################################################*/
-    event RewardAdded(uint256 rewardAmount);
+    event RewardAdded(address indexed token, uint256 rewardAmount);
     /*###############################################################
                             STORAGE
     ###############################################################*/
     uint256 public depositPrincipal;
-    uint256 public rewardPerShareStored;
     uint256 public maxDeposits;
-
-    mapping(address => uint256) public userRewardPerSharePaid;
-    mapping(address => uint256) public rewards;
+    
+    // Reward tracking per token
+    mapping(address => RewardData) public rewardData;
+    mapping(address => mapping(address => uint256)) public userRewardPerSharePaid;
+    mapping(address => mapping(address => uint256)) public rewards;
+    
+    address[] public rewardTokens;
+    mapping(address => bool) public isRewardToken;
 
     /*###############################################################
                             CONSTRUCTOR
@@ -91,15 +103,31 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      *      that new reward tokens have arrived. This increments "rewardPerShareStored"
      *      proportionally to the total shares in existence.
      */
-    function notifyRewardAmount(uint256 rewardAmount) external onlyOwner {
+    function notifyRewardAmount(address token, uint256 rewardAmount) external onlyOwner {
         if (rewardAmount <= 0) revert ZeroRewards();
-        if (rewardAmount > IERC20(asset()).balanceOf(address(this))) revert ExceedsAvailableRewards();
+        if (token == address(0)) revert InvalidToken();
+        
+        IERC20 rewardToken = IERC20(token);
+        if (rewardAmount > rewardToken.balanceOf(address(this))) revert ExceedsAvailableRewards();
 
-        uint256 totalSharesCurrent = totalSupply();
-        if (totalSharesCurrent > 0) {
-            rewardPerShareStored += FixedPointMathLib.fullMulDiv(rewardAmount, 1e18, totalSharesCurrent);
+        // Add to reward tokens list if new
+        if (!isRewardToken[token]) {
+            rewardTokens.push(token);
+            isRewardToken[token] = true;
         }
-        emit RewardAdded(rewardAmount);
+
+        RewardData storage data = rewardData[token];
+        uint256 totalSharesCurrent = totalSupply();
+        
+        if (totalSharesCurrent > 0) {
+            data.rewardPerShareStored += FixedPointMathLib.fullMulDiv(
+                rewardAmount, 
+                1e18, 
+                totalSharesCurrent
+            );
+        }
+        data.totalRewards += rewardAmount;
+        emit RewardAdded(token, rewardAmount);
     }
 
     /*###############################################################
@@ -155,7 +183,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
         whenNotPaused
         returns (uint256)
     {
-        claimRewards();
+        _updateRewards(owner);
 
         uint256 burnedShares = super.withdraw(assets, receiver, owner);
         depositPrincipal -= assets;
@@ -167,7 +195,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
      * @notice Overridden redeem logic that also handles reward distribution.
      */
     function redeem(uint256 shares, address receiver, address owner) public override whenNotPaused returns (uint256) {
-        claimRewards();
+        _updateRewards(owner);
 
         uint256 redeemedAssets = super.redeem(shares, receiver, owner);
         depositPrincipal -= redeemedAssets;
@@ -178,41 +206,65 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable 
     /**
      * @dev Called by user to claim any accrued rewards.
      */
-    function claimRewards() public {
-        _updateRewards(msg.sender);
-
-        uint256 reward = rewards[msg.sender];
+    function claimRewards(address token) public {
+        _updateRewards(msg.sender, token);
+        
+        uint256 reward = rewards[token][msg.sender];
         if (reward > 0) {
-            rewards[msg.sender] = 0;
-            IERC20(asset()).safeTransfer(msg.sender, reward);
+            rewards[token][msg.sender] = 0;
+            IERC20(token).safeTransfer(msg.sender, reward);
+        }
+    }
+
+    // Overloaded for backward compatibility
+    function claimRewards() public {
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            claimRewards(rewardTokens[i]);
         }
     }
 
     /*###############################################################
                             VIEW LOGIC
     ###############################################################*/
-    function previewRewards(address account) external view returns (uint256) {
-        uint256 _rewardPerShare = rewardPerShareStored;
-        uint256 earnedPerShare = _rewardPerShare - userRewardPerSharePaid[account];
+    function previewRewards(address account, address token) external view returns (uint256) {
+        RewardData storage data = rewardData[token];
+        uint256 earnedPerShare = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
         uint256 accountShares = balanceOf(account);
+        
+        return rewards[token][account] + FixedPointMathLib.mulDiv(
+            accountShares, 
+            earnedPerShare, 
+            1e18
+        );
+    }
 
-        return rewards[account] + FixedPointMathLib.mulDiv(accountShares, earnedPerShare, 1e18);
+    // Helper to get all reward tokens
+    function getRewardTokens() external view returns (address[] memory) {
+        return rewardTokens;
     }
 
     /*###############################################################
                             INTERNAL LOGIC
     ###############################################################*/
     function _updateRewards(address account) internal {
-        uint256 _rewardPerShare = rewardPerShareStored;
-
-        // Update user's pending rewards
-        uint256 accountShares = balanceOf(account);
-        if (accountShares > 0) {
-            uint256 earnedPerShare = _rewardPerShare - userRewardPerSharePaid[account];
-            rewards[account] += FixedPointMathLib.mulDiv(accountShares, earnedPerShare, 1e18);
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            _updateRewards(account, rewardTokens[i]);
         }
+    }
 
-        userRewardPerSharePaid[account] = _rewardPerShare;
+    function _updateRewards(address account, address token) internal {
+        RewardData storage data = rewardData[token];
+        uint256 accountShares = balanceOf(account);
+        
+        if (accountShares > 0) {
+            uint256 earnedPerShare = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
+            rewards[token][account] += FixedPointMathLib.mulDiv(
+                accountShares, 
+                earnedPerShare, 
+                1e18
+            );
+        }
+        userRewardPerSharePaid[token][account] = data.rewardPerShareStored;
     }
 
     /*###############################################################
