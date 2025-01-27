@@ -127,7 +127,7 @@ contract fatBERATest is Test {
 
         // Verify reward tracking after Alice claims
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
         assertEq(vault.previewRewards(alice, address(wbera)), 0, "Alice should have 0 rewards after claim");
         assertEq(vault.previewRewards(bob, address(wbera)), 10e18, "Bob's rewards unchanged after Alice's claim");
     }
@@ -203,7 +203,7 @@ contract fatBERATest is Test {
 
         // Claim rewards
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
 
         // Verify reward received
         assertEq(wbera.balanceOf(alice) - balanceBefore, 10e18, "Should receive full reward");
@@ -249,7 +249,7 @@ contract fatBERATest is Test {
         // Withdraw half
         vm.startPrank(alice);
         vault.withdraw(50e18, alice, alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
         vm.stopPrank();
 
         // Verify
@@ -278,7 +278,7 @@ contract fatBERATest is Test {
         // Redeem half shares
         vm.startPrank(alice);
         vault.redeem(50e18, alice, alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
         vm.stopPrank();
 
         // Verify
@@ -323,7 +323,7 @@ contract fatBERATest is Test {
 
         // Alice claims
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
 
         // Second reward cycle
         vm.prank(owner);
@@ -353,7 +353,7 @@ contract fatBERATest is Test {
 
         // Alice claims her first reward
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
 
         // Second reward: 20 WBERA (split between Alice and Bob)
         vm.prank(owner);
@@ -400,7 +400,7 @@ contract fatBERATest is Test {
 
         // Alice claims
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
 
         // Charlie deposits 300
         vm.prank(charlie);
@@ -433,7 +433,7 @@ contract fatBERATest is Test {
 
         // Alice claims but Bob doesn't
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
 
         // Second reward cycle
         vm.prank(owner);
@@ -447,7 +447,7 @@ contract fatBERATest is Test {
 
         // Alice withdraws half
         vm.startPrank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
         vault.withdraw(50e18, alice, alice);
         vm.stopPrank();
 
@@ -504,7 +504,7 @@ contract fatBERATest is Test {
 
         // Bob claims
         vm.prank(bob);
-        vault.claimRewards();
+        vault.claimRewards(address(bob));
 
         // verify bob received rewards
         assertEq(wbera.balanceOf(bob) - bobBalanceBefore, 20e18, "Bob should have received 20 WBERA");
@@ -531,11 +531,11 @@ contract fatBERATest is Test {
         // Alice and Bob withdraw half
         vm.startPrank(alice);
         vault.withdraw(50e18, alice, alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
         vm.stopPrank();
 
         vm.startPrank(bob);
-        vault.claimRewards();
+        vault.claimRewards(address(bob));
         vault.withdraw(100e18, bob, bob);
         vm.stopPrank();
 
@@ -777,7 +777,7 @@ contract fatBERATest is Test {
 
         // Claim rewards
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
 
         // Verify actual rewards received with 0.00001% relative tolerance
         uint256 rewardsReceived = wbera.balanceOf(alice) - balanceBefore;
@@ -823,9 +823,9 @@ contract fatBERATest is Test {
 
         // Claim rewards
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
         vm.prank(bob);
-        vault.claimRewards();
+        vault.claimRewards(address(bob));
 
         // Verify actual rewards received with 0.00001% relative tolerance
         uint256 aliceRewardsReceived = wbera.balanceOf(alice) - aliceBalanceBefore;
@@ -884,7 +884,7 @@ contract fatBERATest is Test {
         uint256 aliceRwd2Before = rewardToken2.balanceOf(alice);
 
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
 
         assertEq(rewardToken1.balanceOf(alice) - aliceRwd1Before, 10e18, "Alice's RWD1 claim incorrect");
         assertEq(rewardToken2.balanceOf(alice) - aliceRwd2Before, 20e18, "Alice's RWD2 claim incorrect");
@@ -907,7 +907,7 @@ contract fatBERATest is Test {
 
         // Alice claims only rewardToken1
         vm.prank(alice);
-        vault.claimRewards(address(rewardToken1));
+        vault.claimRewards(address(rewardToken1), address(alice));
 
         // Second reward cycle
         vm.startPrank(owner);
@@ -1023,9 +1023,9 @@ contract fatBERATest is Test {
 
         // Claim rewards
         vm.prank(alice);
-        vault.claimRewards();
+        vault.claimRewards(address(alice));
         vm.prank(bob);
-        vault.claimRewards();
+        vault.claimRewards(address(bob));
 
         // Verify rewards with 0.00001% relative tolerance
         assertApproxEqRel(
