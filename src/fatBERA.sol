@@ -207,7 +207,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
     /**
      * @dev Called by user to claim any accrued rewards.
      */
-    function claimRewards(address token, address receiver) public {
+    function claimRewards(address token, address receiver) public nonReentrant {
         _updateRewards(msg.sender, token);
         
         uint256 reward = rewards[token][msg.sender];
@@ -218,9 +218,15 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
     }
 
     // Overloaded for multiple reward tokens
-    function claimRewards(address receiver) public {
+    function claimRewards(address receiver) public nonReentrant {
         for (uint256 i = 0; i < rewardTokens.length; i++) {
-            claimRewards(rewardTokens[i], receiver);
+            _updateRewards(msg.sender, rewardTokens[i]);
+
+            uint256 reward = rewards[rewardTokens[i]][msg.sender];
+            if (reward > 0) {
+                rewards[rewardTokens[i]][msg.sender] = 0;
+                IERC20(rewardTokens[i]).safeTransfer(receiver, reward);
+            }
         }
     }
 
