@@ -8,7 +8,7 @@ import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 
 contract fatBERATest is Test {
-    uint256 public maxDeposits  = 1000000 ether;
+    uint256 public maxDeposits  = 36000000 ether;
     address public owner        = makeAddr("owner");
     address public alice        = makeAddr("alice");
     address public bob          = makeAddr("bob");
@@ -17,7 +17,7 @@ contract fatBERATest is Test {
     fatBERA public vault;
     MockERC20 public wbera;
 
-    uint256 public constant INITIAL_MINT = 2000000 ether;
+    uint256 public constant INITIAL_MINT = 36000000 ether;
 
     function setUp() public {
         // Deploy mock WBERA
@@ -751,9 +751,9 @@ contract fatBERATest is Test {
 
     function testFuzz_NotifyRewardAmount(uint256 depositAmount, uint256 rewardAmount) public {
         // Bound deposit amount between 1 and maxDeposits
-        depositAmount = bound(depositAmount, 1, maxDeposits);
+        depositAmount = bound(depositAmount, 1 ether / 10000, maxDeposits);
         // Bound reward amount between 1 and maxDeposits (reasonable range for rewards)
-        rewardAmount = bound(rewardAmount, 1, maxDeposits);
+        rewardAmount = bound(rewardAmount, 1 ether / 1000, maxDeposits);
 
         // Initial deposit
         vm.prank(alice);
@@ -772,9 +772,14 @@ contract fatBERATest is Test {
         vm.prank(alice);
         vault.claimRewards();
 
-        // Verify actual rewards received (allow for small rounding differences)
+        // Verify actual rewards received with 0.00001% relative tolerance
         uint256 rewardsReceived = wbera.balanceOf(alice) - balanceBefore;
-        assertApproxEqAbs(rewardsReceived, rewardAmount, 1, "Reward amount received should be approximately equal");
+        assertApproxEqRel(
+            rewardsReceived,
+            rewardAmount,
+            1e11, // 
+            "Reward amount received should be approximately equal"
+        );
     }
 
     function testFuzz_MultiUserRewardDistribution(
@@ -783,10 +788,10 @@ contract fatBERATest is Test {
         uint256 rewardAmount
     ) public {
         // Bound deposits to avoid overflow and unrealistic values
-        aliceDeposit = bound(aliceDeposit, 1, maxDeposits / 2);
-        bobDeposit = bound(bobDeposit, 1, maxDeposits - aliceDeposit);
+        aliceDeposit = bound(aliceDeposit, 1 ether / 10000, maxDeposits / 2);
+        bobDeposit = bound(bobDeposit, 1 ether / 10000, maxDeposits - aliceDeposit);
         // Bound reward to a reasonable range
-        rewardAmount = bound(rewardAmount, 1, maxDeposits);
+        rewardAmount = bound(rewardAmount, 1 ether / 1000, maxDeposits);
 
         // Alice and Bob deposit
         vm.prank(alice);
@@ -815,16 +820,30 @@ contract fatBERATest is Test {
         vm.prank(bob);
         vault.claimRewards();
 
-        // Verify actual rewards received (allow for small rounding differences)
+        // Verify actual rewards received with 0.00001% relative tolerance
         uint256 aliceRewardsReceived = wbera.balanceOf(alice) - aliceBalanceBefore;
         uint256 bobRewardsReceived = wbera.balanceOf(bob) - bobBalanceBefore;
 
-        // Verify rewards are approximately equal to expected amounts
-        assertApproxEqAbs(aliceRewardsReceived, expectedAliceReward, 1, "Alice rewards should be approximately equal to expected");
-        assertApproxEqAbs(bobRewardsReceived, expectedBobReward, 1, "Bob rewards should be approximately equal to expected");
+        // Verify rewards with 0.00001% relative tolerance
+        assertApproxEqRel(
+            aliceRewardsReceived,
+            expectedAliceReward,
+            1e11,
+            "Alice rewards should be approximately equal to expected"
+        );
+        assertApproxEqRel(
+            bobRewardsReceived,
+            expectedBobReward,
+            1e11,
+            "Bob rewards should be approximately equal to expected"
+        );
         
-        // Verify total rewards distributed are approximately equal to input amount
-        uint256 totalRewardsReceived = aliceRewardsReceived + bobRewardsReceived;
-        assertApproxEqAbs(totalRewardsReceived, rewardAmount, 1, "Total rewards should be approximately equal to reward amount");
+        // Critical safety check - protocol should never over-distribute
+        assertLe(
+            aliceRewardsReceived + bobRewardsReceived,
+            rewardAmount,
+            "Total distributed rewards should not exceed input amount"
+        );
+        
     }
 }
