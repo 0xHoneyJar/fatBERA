@@ -16,24 +16,31 @@ contract fatBERATest is Test {
 
     fatBERA public vault;
     MockERC20 public wbera;
+    MockERC20 public rewardToken1;
+    MockERC20 public rewardToken2;
 
     uint256 public constant INITIAL_MINT = 36000000 ether;
 
     function setUp() public {
         // Deploy mock WBERA
         wbera = new MockERC20("Wrapped BERA", "WBERA", 18);
+        rewardToken1 = new MockERC20("Reward Token 1", "RWD1", 18);
+        rewardToken2 = new MockERC20("Reward Token 2", "RWD2", 18);
 
         // Deploy implementation and proxy
         bytes memory initData = abi.encodeWithSelector(fatBERA.initialize.selector, address(wbera), owner, maxDeposits);
         vault = fatBERA(payable(Upgrades.deployUUPSProxy("fatBERA.sol:fatBERA", initData)));
 
-        // Mint initial WBERA to test accounts
+        // Mint initial tokens to test accounts
         wbera.mint(alice, INITIAL_MINT);
         wbera.mint(bob, INITIAL_MINT);
         wbera.mint(charlie, INITIAL_MINT);
         wbera.mint(owner, INITIAL_MINT);
 
-        // Approve vault to spend WBERA
+        rewardToken1.mint(owner, INITIAL_MINT);
+        rewardToken2.mint(owner, INITIAL_MINT);
+
+        // Approve vault to spend tokens
         vm.prank(alice);
         wbera.approve(address(vault), type(uint256).max);
         vm.prank(bob);
@@ -845,5 +852,217 @@ contract fatBERATest is Test {
             "Total distributed rewards should not exceed input amount"
         );
         
+    }
+
+    function test_MultiTokenRewards() public {
+        // Initial deposits
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+        vm.prank(bob);
+        vault.deposit(100e18, bob);
+
+        // Add first reward token
+        vm.startPrank(owner);
+        rewardToken1.transfer(address(vault), 20e18);
+        vault.notifyRewardAmount(address(rewardToken1), 20e18);
+        vm.stopPrank();
+
+        // Add second reward token
+        vm.startPrank(owner);
+        rewardToken2.transfer(address(vault), 40e18);
+        vault.notifyRewardAmount(address(rewardToken2), 40e18);
+        vm.stopPrank();
+
+        // Verify reward preview for both tokens
+        assertEq(vault.previewRewards(alice, address(rewardToken1)), 10e18, "Alice's RWD1 rewards incorrect");
+        assertEq(vault.previewRewards(alice, address(rewardToken2)), 20e18, "Alice's RWD2 rewards incorrect");
+        assertEq(vault.previewRewards(bob, address(rewardToken1)), 10e18, "Bob's RWD1 rewards incorrect");
+        assertEq(vault.previewRewards(bob, address(rewardToken2)), 20e18, "Bob's RWD2 rewards incorrect");
+
+        // Claim rewards and verify balances
+        uint256 aliceRwd1Before = rewardToken1.balanceOf(alice);
+        uint256 aliceRwd2Before = rewardToken2.balanceOf(alice);
+
+        vm.prank(alice);
+        vault.claimRewards();
+
+        assertEq(rewardToken1.balanceOf(alice) - aliceRwd1Before, 10e18, "Alice's RWD1 claim incorrect");
+        assertEq(rewardToken2.balanceOf(alice) - aliceRwd2Before, 20e18, "Alice's RWD2 claim incorrect");
+    }
+
+    function test_MultiTokenRewardsWithPartialClaims() public {
+        // Initial deposits
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+        vm.prank(bob);
+        vault.deposit(100e18, bob);
+
+        // First reward cycle with both tokens
+        vm.startPrank(owner);
+        rewardToken1.transfer(address(vault), 20e18);
+        rewardToken2.transfer(address(vault), 40e18);
+        vault.notifyRewardAmount(address(rewardToken1), 20e18);
+        vault.notifyRewardAmount(address(rewardToken2), 40e18);
+        vm.stopPrank();
+
+        // Alice claims only rewardToken1
+        vm.prank(alice);
+        vault.claimRewards(address(rewardToken1));
+
+        // Second reward cycle
+        vm.startPrank(owner);
+        rewardToken1.transfer(address(vault), 30e18);
+        rewardToken2.transfer(address(vault), 60e18);
+        vault.notifyRewardAmount(address(rewardToken1), 30e18);
+        vault.notifyRewardAmount(address(rewardToken2), 60e18);
+        vm.stopPrank();
+
+        // Verify rewards state
+        assertEq(vault.previewRewards(alice, address(rewardToken1)), 15e18, "Alice's RWD1 rewards after partial claim");
+        assertEq(vault.previewRewards(alice, address(rewardToken2)), 50e18, "Alice's RWD2 rewards accumulated");
+        assertEq(vault.previewRewards(bob, address(rewardToken1)), 25e18, "Bob's RWD1 total rewards");
+        assertEq(vault.previewRewards(bob, address(rewardToken2)), 50e18, "Bob's RWD2 total rewards");
+    }
+
+    function test_MultiTokenRewardsWithDepositsAndWithdrawals() public {
+        vm.prank(owner);
+        vault.unpause();
+
+        // Initial deposits
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+        vm.prank(bob);
+        vault.deposit(200e18, bob);
+
+        // First reward cycle
+        vm.startPrank(owner);
+        rewardToken1.transfer(address(vault), 30e18);
+        rewardToken2.transfer(address(vault), 60e18);
+        vault.notifyRewardAmount(address(rewardToken1), 30e18);
+        vault.notifyRewardAmount(address(rewardToken2), 60e18);
+        vm.stopPrank();
+
+        // Bob withdraws half
+        vm.prank(bob);
+        vault.withdraw(100e18, bob, bob);
+
+        // Second reward cycle
+        vm.startPrank(owner);
+        rewardToken1.transfer(address(vault), 40e18);
+        rewardToken2.transfer(address(vault), 80e18);
+        vault.notifyRewardAmount(address(rewardToken1), 40e18);
+        vault.notifyRewardAmount(address(rewardToken2), 80e18);
+        vm.stopPrank();
+
+        // Verify final reward states
+        assertEq(vault.previewRewards(alice, address(rewardToken1)), 30e18, "Alice's final RWD1 rewards");
+        assertEq(vault.previewRewards(alice, address(rewardToken2)), 60e18, "Alice's final RWD2 rewards");
+        assertEq(vault.previewRewards(bob, address(rewardToken1)), 40e18, "Bob's final RWD1 rewards");
+        assertEq(vault.previewRewards(bob, address(rewardToken2)), 80e18, "Bob's final RWD2 rewards");
+    }
+
+    function test_GetRewardTokensList() public {
+        // Add first reward token
+        vm.startPrank(owner);
+        rewardToken1.transfer(address(vault), 20e18);
+        vault.notifyRewardAmount(address(rewardToken1), 20e18);
+
+        // Add second reward token
+        rewardToken2.transfer(address(vault), 40e18);
+        vault.notifyRewardAmount(address(rewardToken2), 40e18);
+        vm.stopPrank();
+
+        // Get reward tokens list
+        address[] memory rewardTokens = vault.getRewardTokens();
+        
+        // Verify list contents
+        assertEq(rewardTokens.length, 2, "Should have 2 reward tokens");
+        assertEq(rewardTokens[0], address(rewardToken1), "First reward token mismatch");
+        assertEq(rewardTokens[1], address(rewardToken2), "Second reward token mismatch");
+    }
+
+    function testFuzz_MultiTokenRewardDistribution(
+        uint256 aliceDeposit,
+        uint256 bobDeposit,
+        uint256 reward1Amount,
+        uint256 reward2Amount
+    ) public {
+        // Bound deposits to avoid overflow and unrealistic values
+        aliceDeposit = bound(aliceDeposit, 1 ether / 10000, maxDeposits / 2);
+        bobDeposit = bound(bobDeposit, 1 ether / 10000, maxDeposits - aliceDeposit);
+        // Bound rewards to reasonable ranges
+        reward1Amount = bound(reward1Amount, 1 ether / 1000, maxDeposits);
+        reward2Amount = bound(reward2Amount, 1 ether / 1000, maxDeposits);
+
+        // Alice and Bob deposit
+        vm.prank(alice);
+        vault.deposit(aliceDeposit, alice);
+        vm.prank(bob);
+        vault.deposit(bobDeposit, bob);
+
+        // Add rewards
+        vm.startPrank(owner);
+        rewardToken1.transfer(address(vault), reward1Amount);
+        rewardToken2.transfer(address(vault), reward2Amount);
+        vault.notifyRewardAmount(address(rewardToken1), reward1Amount);
+        vault.notifyRewardAmount(address(rewardToken2), reward2Amount);
+        vm.stopPrank();
+
+        // Calculate expected rewards
+        uint256 totalDeposits = aliceDeposit + bobDeposit;
+        uint256 expectedAliceReward1 = FixedPointMathLib.mulDiv(reward1Amount, aliceDeposit, totalDeposits);
+        uint256 expectedAliceReward2 = FixedPointMathLib.mulDiv(reward2Amount, aliceDeposit, totalDeposits);
+        uint256 expectedBobReward1 = FixedPointMathLib.mulDiv(reward1Amount, bobDeposit, totalDeposits);
+        uint256 expectedBobReward2 = FixedPointMathLib.mulDiv(reward2Amount, bobDeposit, totalDeposits);
+
+        // Record balances before claims
+        uint256 aliceReward1Before = rewardToken1.balanceOf(alice);
+        uint256 aliceReward2Before = rewardToken2.balanceOf(alice);
+        uint256 bobReward1Before = rewardToken1.balanceOf(bob);
+        uint256 bobReward2Before = rewardToken2.balanceOf(bob);
+
+        // Claim rewards
+        vm.prank(alice);
+        vault.claimRewards();
+        vm.prank(bob);
+        vault.claimRewards();
+
+        // Verify rewards with 0.00001% relative tolerance
+        assertApproxEqRel(
+            rewardToken1.balanceOf(alice) - aliceReward1Before,
+            expectedAliceReward1,
+            1e11,
+            "Alice reward1 mismatch"
+        );
+        assertApproxEqRel(
+            rewardToken2.balanceOf(alice) - aliceReward2Before,
+            expectedAliceReward2,
+            1e11,
+            "Alice reward2 mismatch"
+        );
+        assertApproxEqRel(
+            rewardToken1.balanceOf(bob) - bobReward1Before,
+            expectedBobReward1,
+            1e11,
+            "Bob reward1 mismatch"
+        );
+        assertApproxEqRel(
+            rewardToken2.balanceOf(bob) - bobReward2Before,
+            expectedBobReward2,
+            1e11,
+            "Bob reward2 mismatch"
+        );
+
+        // Verify total rewards don't exceed input amounts
+        assertLe(
+            (rewardToken1.balanceOf(alice) - aliceReward1Before) + (rewardToken1.balanceOf(bob) - bobReward1Before),
+            reward1Amount,
+            "Total reward1 distribution exceeds input"
+        );
+        assertLe(
+            (rewardToken2.balanceOf(alice) - aliceReward2Before) + (rewardToken2.balanceOf(bob) - bobReward2Before),
+            reward2Amount,
+            "Total reward2 distribution exceeds input"
+        );
     }
 }
