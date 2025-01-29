@@ -4,6 +4,7 @@ pragma solidity ^0.8.23;
 import {Test, console2} from "forge-std/Test.sol";
 import {fatBERA} from "../src/fatBERA.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
+import {MockWETH} from "./mocks/MockWETH.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 
@@ -15,7 +16,7 @@ contract fatBERATest is Test {
     address public charlie      = makeAddr("charlie");
 
     fatBERA public vault;
-    MockERC20 public wbera;
+    MockWETH public wbera;
     MockERC20 public rewardToken1;
     MockERC20 public rewardToken2;
 
@@ -23,7 +24,7 @@ contract fatBERATest is Test {
 
     function setUp() public {
         // Deploy mock WBERA
-        wbera = new MockERC20("Wrapped BERA", "WBERA", 18);
+        wbera = new MockWETH();
         rewardToken1 = new MockERC20("Reward Token 1", "RWD1", 18);
         rewardToken2 = new MockERC20("Reward Token 2", "RWD2", 18);
 
@@ -49,6 +50,11 @@ contract fatBERATest is Test {
         wbera.approve(address(vault), type(uint256).max);
         vm.prank(owner);
         wbera.approve(address(vault), type(uint256).max);
+
+        // Fund test accounts with ETH
+        vm.deal(alice, INITIAL_MINT);
+        vm.deal(bob, INITIAL_MINT);
+        vm.deal(charlie, INITIAL_MINT);
     }
 
     function test_Initialize() public view {
@@ -1063,6 +1069,129 @@ contract fatBERATest is Test {
             (rewardToken2.balanceOf(alice) - aliceReward2Before) + (rewardToken2.balanceOf(bob) - bobReward2Before),
             reward2Amount,
             "Total reward2 distribution exceeds input"
+        );
+    }
+
+    // Native Deposit Specific Tests
+    function test_DepositNativeBasic() public {
+        uint256 depositAmount = 1 ether;
+        vm.prank(alice);
+        vault.depositNative{value: depositAmount}(alice);
+
+        assertEq(vault.balanceOf(alice), depositAmount, "Shares minted");
+        assertEq(vault.depositPrincipal(), depositAmount, "Principal tracking");
+        assertEq(address(vault).balance, 0, "No leftover ETH");
+    }
+
+    function test_DepositNativeRevertZeroValue() public {
+        vm.prank(alice);
+        vm.expectRevert(fatBERA.ZeroPrincipal.selector);
+        vault.depositNative{value: 0}(alice);
+    }
+
+    function test_DepositNativeExceedsMax() public {
+        uint256 maxDeposit = maxDeposits - 1 ether;
+        
+        // Fill up to max
+        vm.prank(alice);
+        vault.deposit(maxDeposit, alice);
+
+        // Try to deposit 1.01 ETH native 
+        vm.prank(bob);
+        vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
+        vault.depositNative{value: 1.01 ether}(bob);
+    }
+
+    function test_DepositNativeWETHBalance() public {
+        uint256 depositAmount = 5 ether;
+        uint256 initialWETHBalance = wbera.balanceOf(address(vault));
+
+        vm.prank(alice);
+        vault.depositNative{value: depositAmount}(alice);
+
+        assertEq(
+            wbera.balanceOf(address(vault)),
+            initialWETHBalance + depositAmount,
+            "WETH balance should increase by deposit amount"
+        );
+    }
+
+    function test_MixedDepositMethods() public {
+        uint256 nativeDeposit = 2 ether;
+        uint256 erc20Deposit = 3 ether;
+
+        // Native deposit
+        vm.prank(alice);
+        vault.depositNative{value: nativeDeposit}(alice);
+
+        // ERC20 deposit
+        vm.prank(alice);
+        vault.deposit(erc20Deposit, alice);
+
+        assertEq(
+            vault.depositPrincipal(),
+            nativeDeposit + erc20Deposit,
+            "Should track both deposit types"
+        );
+        assertEq(
+            vault.balanceOf(alice),
+            nativeDeposit + erc20Deposit,
+            "Shares should be cumulative"
+        );
+    }
+
+    function test_NativeDepositWithRewards() public {
+        uint256 depositAmount = 10 ether;
+        
+        vm.prank(alice);
+        vault.depositNative{value: depositAmount}(alice);
+
+        // Add rewards
+        vm.prank(owner);
+        wbera.transfer(address(vault), 10 ether);
+        vm.prank(owner);
+        vault.notifyRewardAmount(address(wbera), 10 ether);
+
+        // Verify rewards
+        assertEq(
+            vault.previewRewards(alice, address(wbera)),
+            10 ether,
+            "Should accrue rewards correctly"
+        );
+    }
+
+    // Fuzz Tests
+    function testFuzz_DepositNative(uint256 amount) public {
+        amount = bound(amount, 1 wei, maxDeposits);
+        vm.deal(alice, amount);
+
+        vm.prank(alice);
+        vault.depositNative{value: amount}(alice);
+
+        assertEq(vault.balanceOf(alice), amount, "Shares should match deposit");
+        assertEq(vault.depositPrincipal(), amount, "Principal should match");
+    }
+
+    function testFuzz_MixedDepositTypes(
+        uint256 nativeAmount,
+        uint256 erc20Amount
+    ) public {
+        nativeAmount = bound(nativeAmount, 1 wei, maxDeposits / 2);
+        erc20Amount = bound(erc20Amount, 1 wei, maxDeposits - nativeAmount);
+        vm.deal(alice, nativeAmount);
+
+        // Native deposit
+        vm.prank(alice);
+        vault.depositNative{value: nativeAmount}(alice);
+
+        // ERC20 deposit
+        vm.prank(alice);
+        vault.deposit(erc20Amount, alice);
+
+        assertEq(
+            vault.depositPrincipal(),
+            nativeAmount + erc20Amount,
+            "Total principal should sum both types"
         );
     }
 }

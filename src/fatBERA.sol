@@ -9,6 +9,14 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
+/*###############################################################
+                            INTERFACES
+###############################################################*/
+interface IWETH is IERC20 {
+    function deposit() external payable;
+    function withdraw(uint256 amount) external;
+}
+
 contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
@@ -142,11 +150,38 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
     function totalAssets() public view virtual override returns (uint256) {
         return totalSupply();
     }
+    
+    /**
+     * @dev Deposit native ETH into the vault, wrapping it into WBERA. Here for better UX for users.
+     * @param receiver The address to receive the shares.
+     * @return The number of shares minted.
+     */
+    function depositNative(address receiver) external payable nonReentrant returns (uint256) {
+        if (msg.value == 0) revert ZeroPrincipal();
+        if (depositPrincipal + msg.value > maxDeposits) revert ExceedsMaxDeposits();
+        _updateRewards(receiver);
+
+        // Wrap native token
+        IWETH weth = IWETH(asset());
+        weth.deposit{value: msg.value}();
+
+        // Calculate shares directly using previewDeposit
+        uint256 shares = previewDeposit(msg.value);
+        
+        // Bypass ERC4626 deposit and mint directly (we already have the assets)
+        _mint(receiver, shares);
+        depositPrincipal += msg.value;
+
+        // Manually emit Deposit event to match ERC4626 spec
+        emit Deposit(msg.sender, receiver, msg.value, shares);
+
+        return shares;
+    }
+
     /**
      * @notice Overridden deposit logic to account for rewards, then
      *         increment depositPrincipal.
      */
-
     function deposit(uint256 assets, address receiver) public virtual override returns (uint256) {
         if (depositPrincipal + assets > maxDeposits) revert ExceedsMaxDeposits();
         _updateRewards(receiver);
