@@ -7,10 +7,12 @@ import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockWETH} from "./mocks/MockWETH.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract fatBERATest is Test {
     uint256 public maxDeposits  = 36000000 ether;
-    address public owner        = makeAddr("owner");
+    address public admin        = makeAddr("admin");
     address public alice        = makeAddr("alice");
     address public bob          = makeAddr("bob");
     address public charlie      = makeAddr("charlie");
@@ -28,18 +30,36 @@ contract fatBERATest is Test {
         rewardToken1 = new MockERC20("Reward Token 1", "RWD1", 18);
         rewardToken2 = new MockERC20("Reward Token 2", "RWD2", 18);
 
-        // Deploy implementation and proxy
-        bytes memory initData = abi.encodeWithSelector(fatBERA.initialize.selector, address(wbera), owner, maxDeposits);
-        vault = fatBERA(payable(Upgrades.deployUUPSProxy("fatBERA.sol:fatBERA", initData)));
+        // Deploy vault with admin as DEFAULT_ADMIN_ROLE
+        bytes memory initData = abi.encodeWithSelector(
+            fatBERA.initialize.selector, 
+            address(wbera), 
+            admin,  // Now initial admin
+            maxDeposits
+        );
+
+        // Deploy proxy using the implementation - match deployment script approach
+        address proxy = Upgrades.deployUUPSProxy(
+            "fatBERA.sol:fatBERA",
+            initData
+        );
+        vault = fatBERA(payable(proxy));
+
+        // Debug logs
+        console2.log("Admin address:", admin);
+        console2.log("Proxy address:", address(proxy));
+        console2.log("Implementation address:", Upgrades.getImplementationAddress(address(proxy)));
+        console2.log("Admin has DEFAULT_ADMIN_ROLE:", vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin));
+        console2.log("Admin has REWARD_NOTIFIER_ROLE:", vault.hasRole(vault.REWARD_NOTIFIER_ROLE(), admin));
 
         // Mint initial tokens to test accounts
         wbera.mint(alice, INITIAL_MINT);
         wbera.mint(bob, INITIAL_MINT);
         wbera.mint(charlie, INITIAL_MINT);
-        wbera.mint(owner, INITIAL_MINT);
+        wbera.mint(admin, INITIAL_MINT);
 
-        rewardToken1.mint(owner, INITIAL_MINT);
-        rewardToken2.mint(owner, INITIAL_MINT);
+        rewardToken1.mint(admin, INITIAL_MINT);
+        rewardToken2.mint(admin, INITIAL_MINT);
 
         // Approve vault to spend tokens
         vm.prank(alice);
@@ -48,7 +68,7 @@ contract fatBERATest is Test {
         wbera.approve(address(vault), type(uint256).max);
         vm.prank(charlie);
         wbera.approve(address(vault), type(uint256).max);
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.approve(address(vault), type(uint256).max);
 
         // Fund test accounts with ETH
@@ -58,7 +78,8 @@ contract fatBERATest is Test {
     }
 
     function test_Initialize() public view {
-        assertEq(vault.owner(), owner);
+        // Check roles instead of owner
+        assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin), "Admin should have DEFAULT_ADMIN_ROLE");
         assertEq(address(vault.asset()), address(wbera));
         assertEq(vault.paused(), true);
         (uint256 rewardPerShareStored, uint256 totalRewards) = vault.rewardData(address(wbera));
@@ -93,9 +114,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, alice);
 
         // First reward: 10 WBERA
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount( address(wbera), 10e18);
 
         // Manual calculation for first reward
@@ -113,9 +134,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, bob);
 
         // Second reward: 20 WBERA
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 20e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera), 20e18);
 
         // Manual calculation for second reward
@@ -139,6 +160,9 @@ contract fatBERATest is Test {
     }
 
     function test_BasicDepositAndReward() public {
+        // Admin already has REWARD_NOTIFIER_ROLE from initialize()
+        // No need to grant it again
+
         // Alice deposits 100 WBERA
         uint256 aliceDeposit = 100e18;
         vm.prank(alice);
@@ -150,39 +174,38 @@ contract fatBERATest is Test {
         assertEq(vault.totalSupply(), aliceDeposit);
         assertEq(vault.totalAssets(), aliceDeposit);
 
-        // Owner notifies 10 WBERA as reward
-        uint256 rewardAmount = 10e18;
-        vm.prank(owner);
-        wbera.transfer(address(vault), rewardAmount);
-        vm.prank(owner);
-        vault.notifyRewardAmount(address(wbera), rewardAmount);
+        // Add reward
+        vm.prank(admin);
+        wbera.transfer(address(vault), 10e18);
+        vm.prank(admin);
+        vault.notifyRewardAmount(address(wbera), 10e18);
 
         // Check Alice's claimable rewards
-        assertEq(vault.previewRewards(alice, address(wbera)), rewardAmount, "All rewards should go to Alice");
+        assertEq(vault.previewRewards(alice, address(wbera)), 10e18, "All rewards should go to Alice");
     }
 
     function test_MultipleDepositorsRewardDistribution() public {
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Alice deposits 100 WBERA
         vm.prank(alice);
         vault.deposit(100e18, alice);
 
-        // Owner adds 10 WBERA reward
-        vm.prank(owner);
+        // Admin adds 10 WBERA reward
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Bob deposits 100 WBERA
         vm.prank(bob);
         vault.deposit(100e18, bob);
 
-        // Owner adds another 10 WBERA reward
-        vm.prank(owner);
+        // Admin adds another 10 WBERA reward
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Check rewards
@@ -191,7 +214,7 @@ contract fatBERATest is Test {
     }
 
     function test_ClaimRewards() public {
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Alice deposits
@@ -199,9 +222,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, alice);
 
         // Add reward
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Record balance before claim
@@ -217,16 +240,16 @@ contract fatBERATest is Test {
     }
 
     function test_OwnerWithdrawPrincipal() public {
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Alice deposits
         vm.prank(alice);
         vault.deposit(100e18, alice);
 
-        // Owner withdraws principal for staking
-        vm.prank(owner);
-        vault.withdrawPrincipal(50e18, owner);
+        // Admin withdraws principal for staking
+        vm.prank(admin);
+        vault.withdrawPrincipal(50e18, admin);
 
         // Check state
         assertEq(vault.depositPrincipal(), 50e18, "Principal should be reduced");
@@ -236,7 +259,7 @@ contract fatBERATest is Test {
     }
 
     function test_WithdrawWithRewards() public {
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Alice deposits
@@ -244,9 +267,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, alice);
 
         // Add reward
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Record balance before withdrawal
@@ -265,7 +288,7 @@ contract fatBERATest is Test {
     }
 
     function test_RedeemWithRewards() public {
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Alice deposits
@@ -273,9 +296,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, alice);
 
         // Add reward
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Record balance before redeem
@@ -294,7 +317,7 @@ contract fatBERATest is Test {
     }
 
     function test_CannotWithdrawWhenPaused() public {
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Alice deposits
@@ -302,7 +325,7 @@ contract fatBERATest is Test {
         vault.deposit(100e18, alice);
 
         // Pause vault
-        vm.prank(owner);
+        vm.prank(admin);
         vault.pause();
 
         // Try to withdraw
@@ -312,7 +335,7 @@ contract fatBERATest is Test {
     }
 
     function test_MultipleRewardCycles() public {
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Alice and Bob deposit
@@ -322,9 +345,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, bob);
 
         // First reward cycle
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Alice claims
@@ -332,9 +355,9 @@ contract fatBERATest is Test {
         vault.claimRewards(address(alice));
 
         // Second reward cycle
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Verify rewards
@@ -348,9 +371,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, alice);
 
         // First reward: 10 WBERA
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Bob deposits 100
@@ -362,9 +385,9 @@ contract fatBERATest is Test {
         vault.claimRewards(address(alice));
 
         // Second reward: 20 WBERA (split between Alice and Bob)
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 20e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),20e18);
 
         // Charlie deposits 200
@@ -372,9 +395,9 @@ contract fatBERATest is Test {
         vault.deposit(200e18, charlie);
 
         // Third reward: 30 WBERA (split between all three)
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 40e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),40e18);
 
         // Verify final reward states
@@ -389,9 +412,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, alice);
 
         // Reward 1: 10 WBERA
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Bob deposits 200
@@ -399,9 +422,9 @@ contract fatBERATest is Test {
         vault.deposit(200e18, bob);
 
         // Reward 2: 30 WBERA
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 30e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),30e18);
 
         // Alice claims
@@ -413,9 +436,9 @@ contract fatBERATest is Test {
         vault.deposit(300e18, charlie);
 
         // Reward 3: 60 WBERA
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 60e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),60e18);
 
         // Verify complex reward distribution
@@ -432,9 +455,9 @@ contract fatBERATest is Test {
         vault.deposit(100e18, bob);
 
         // First reward cycle
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 20e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),20e18);
 
         // Alice claims but Bob doesn't
@@ -442,13 +465,13 @@ contract fatBERATest is Test {
         vault.claimRewards(address(alice));
 
         // Second reward cycle
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Enable withdrawals
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Alice withdraws half
@@ -458,9 +481,9 @@ contract fatBERATest is Test {
         vm.stopPrank();
 
         // Third reward cycle
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 30e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),30e18);
 
         // Verify final states
@@ -472,9 +495,9 @@ contract fatBERATest is Test {
 
     function test_notifyRewardAmount() public {
         // Try to notify reward with no deposits
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
 
         // Alice deposits after failed reward
@@ -485,9 +508,9 @@ contract fatBERATest is Test {
         assertEq(vault.previewRewards(alice, address(wbera)), 0, "Should have no rewards from before deposit");
 
         // New reward should work
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),10e18);
         assertEq(vault.previewRewards(alice, address(wbera)), 10e18, "Should receive new rewards");
     }
@@ -500,9 +523,9 @@ contract fatBERATest is Test {
         vault.deposit(200e18, bob);
 
         // First reward
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 30e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),30e18);
 
         // bob balance before claim
@@ -520,14 +543,14 @@ contract fatBERATest is Test {
         vault.deposit(300e18, charlie);
 
         // Second reward
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 60e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),60e18);
 
         // Enable withdrawals
         
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Record balances before withdrawals
@@ -558,9 +581,9 @@ contract fatBERATest is Test {
         );
 
         // Third reward
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 90e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),90e18);
 
         // Verify final reward state
@@ -576,18 +599,18 @@ contract fatBERATest is Test {
         vm.prank(bob);
         vault.deposit(100e18, bob);
 
-        // Owner withdraws 150 for staking
-        vm.prank(owner);
-        vault.withdrawPrincipal(150e18, owner);
+        // Admin withdraws 150 for staking
+        vm.prank(admin);
+        vault.withdrawPrincipal(150e18, admin);
 
         // Verify deposit principal reduced but shares unchanged
         assertEq(vault.depositPrincipal(), 50e18, "Deposit principal should be reduced");
         assertEq(vault.totalSupply(), 200e18, "Total supply should be unchanged");
 
         // Add rewards (simulating staking returns)
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 30e18);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),30e18);
 
         // Verify rewards still work correctly
@@ -632,13 +655,13 @@ contract fatBERATest is Test {
         vm.prank(alice);
         vault.deposit(500_000 ether, alice);
 
-        // Try to set max deposits below current deposits
-        vm.prank(owner);
+        // Try to set max deposits below current (now using admin)
+        vm.prank(admin);
         vm.expectRevert(fatBERA.InvalidMaxDeposits.selector);
         vault.setMaxDeposits(400_000 ether);
 
-        // Update max deposits to a higher value
-        vm.prank(owner);
+        // Update max deposits
+        vm.prank(admin);
         vault.setMaxDeposits(2_000_000 ether);
 
         // Should now be able to deposit more
@@ -723,7 +746,7 @@ contract fatBERATest is Test {
         withdrawAmount = bound(withdrawAmount, 1, depositAmount);
 
         // Enable withdrawals
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Deposit
@@ -746,7 +769,7 @@ contract fatBERATest is Test {
         redeemShares = bound(redeemShares, 1, depositAmount);
 
         // Enable withdrawals
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Deposit
@@ -773,9 +796,9 @@ contract fatBERATest is Test {
         vault.deposit(depositAmount, alice);
 
         // Add reward
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), rewardAmount);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),rewardAmount);
 
         // Record balance before claim
@@ -813,9 +836,9 @@ contract fatBERATest is Test {
         vault.deposit(bobDeposit, bob);
 
         // Add reward
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), rewardAmount);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera),rewardAmount);
 
         // Calculate expected rewards using the same mulDiv logic as the contract
@@ -868,13 +891,13 @@ contract fatBERATest is Test {
         vault.deposit(100e18, bob);
 
         // Add first reward token
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         rewardToken1.transfer(address(vault), 20e18);
         vault.notifyRewardAmount(address(rewardToken1), 20e18);
         vm.stopPrank();
 
         // Add second reward token
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         rewardToken2.transfer(address(vault), 40e18);
         vault.notifyRewardAmount(address(rewardToken2), 40e18);
         vm.stopPrank();
@@ -904,7 +927,7 @@ contract fatBERATest is Test {
         vault.deposit(100e18, bob);
 
         // First reward cycle with both tokens
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         rewardToken1.transfer(address(vault), 20e18);
         rewardToken2.transfer(address(vault), 40e18);
         vault.notifyRewardAmount(address(rewardToken1), 20e18);
@@ -916,7 +939,7 @@ contract fatBERATest is Test {
         vault.claimRewards(address(rewardToken1), address(alice));
 
         // Second reward cycle
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         rewardToken1.transfer(address(vault), 30e18);
         rewardToken2.transfer(address(vault), 60e18);
         vault.notifyRewardAmount(address(rewardToken1), 30e18);
@@ -931,7 +954,7 @@ contract fatBERATest is Test {
     }
 
     function test_MultiTokenRewardsWithDepositsAndWithdrawals() public {
-        vm.prank(owner);
+        vm.prank(admin);
         vault.unpause();
 
         // Initial deposits
@@ -941,7 +964,7 @@ contract fatBERATest is Test {
         vault.deposit(200e18, bob);
 
         // First reward cycle
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         rewardToken1.transfer(address(vault), 30e18);
         rewardToken2.transfer(address(vault), 60e18);
         vault.notifyRewardAmount(address(rewardToken1), 30e18);
@@ -953,7 +976,7 @@ contract fatBERATest is Test {
         vault.withdraw(100e18, bob, bob);
 
         // Second reward cycle
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         rewardToken1.transfer(address(vault), 40e18);
         rewardToken2.transfer(address(vault), 80e18);
         vault.notifyRewardAmount(address(rewardToken1), 40e18);
@@ -969,7 +992,7 @@ contract fatBERATest is Test {
 
     function test_GetRewardTokensList() public {
         // Add first reward token
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         rewardToken1.transfer(address(vault), 20e18);
         vault.notifyRewardAmount(address(rewardToken1), 20e18);
 
@@ -1007,7 +1030,7 @@ contract fatBERATest is Test {
         vault.deposit(bobDeposit, bob);
 
         // Add rewards
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         rewardToken1.transfer(address(vault), reward1Amount);
         rewardToken2.transfer(address(vault), reward2Amount);
         vault.notifyRewardAmount(address(rewardToken1), reward1Amount);
@@ -1147,9 +1170,9 @@ contract fatBERATest is Test {
         vault.depositNative{value: depositAmount}(alice);
 
         // Add rewards
-        vm.prank(owner);
+        vm.prank(admin);
         wbera.transfer(address(vault), 10 ether);
-        vm.prank(owner);
+        vm.prank(admin);
         vault.notifyRewardAmount(address(wbera), 10 ether);
 
         // Verify rewards
@@ -1193,5 +1216,38 @@ contract fatBERATest is Test {
             nativeAmount + erc20Amount,
             "Total principal should sum both types"
         );
+    }
+
+    function test_RoleManagement() public {
+        address newNotifier = makeAddr("newNotifier");
+
+        // First verify initial roles
+        assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin), "Admin should have DEFAULT_ADMIN_ROLE");
+        assertTrue(vault.hasRole(vault.REWARD_NOTIFIER_ROLE(), admin), "Admin should have REWARD_NOTIFIER_ROLE");
+
+        // Admin grants REWARD_NOTIFIER_ROLE to new address
+        vm.startPrank(admin);
+        vault.grantRole(vault.REWARD_NOTIFIER_ROLE(), newNotifier);
+        vm.stopPrank();
+
+        // Verify roles after granting
+        assertTrue(vault.hasRole(vault.REWARD_NOTIFIER_ROLE(), newNotifier), "New notifier should have role");
+        assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin), "Admin should still have admin role");
+        assertTrue(vault.hasRole(vault.REWARD_NOTIFIER_ROLE(), admin), "Admin should still have notifier role");
+
+        // Test revoking role
+        vm.startPrank(admin);
+        vault.revokeRole(vault.REWARD_NOTIFIER_ROLE(), newNotifier);
+        vm.stopPrank();
+        assertFalse(vault.hasRole(vault.REWARD_NOTIFIER_ROLE(), newNotifier), "Role should be revoked");
+        console2.log("newNotifier", newNotifier);
+
+        bytes32 role = vault.REWARD_NOTIFIER_ROLE();
+
+        // Test that non-admin cannot grant roles
+        vm.startPrank(newNotifier);
+        vm.expectRevert();
+        vault.grantRole(role, alice);
+        vm.stopPrank();
     }
 }

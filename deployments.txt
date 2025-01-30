@@ -25,3 +25,5 @@ source .env && forge script script/DeployFatBERA.s.sol:DeployFatBERA \
                   DEPLOYMENTS
 ###############################################
 
+Implementation: 0x5A9C90007A3Db6fE964AB4ddD58763aa51661035
+Proxy: 0x508FD0639eFA35F42e83D6E3a0CdE8Bb957f827f
