@@ -4,10 +4,10 @@ pragma solidity ^0.8.23;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
 /*###############################################################
                             INTERFACES
@@ -17,7 +17,12 @@ interface IWETH is IERC20 {
     function withdraw(uint256 amount) external;
 }
 
-contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+contract fatBERA is 
+    ERC4626Upgradeable,
+    PausableUpgradeable,
+    ReentrancyGuardUpgradeable,
+    AccessControlUpgradeable
+{
     using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
     /*###############################################################
@@ -55,6 +60,9 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
     address[] public rewardTokens;
     mapping(address => bool) public isRewardToken;
 
+    // Define role constants
+    bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
+
     /*###############################################################
                             CONSTRUCTOR
     ###############################################################*/
@@ -68,7 +76,13 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
     function initialize(address _asset, address _owner, uint256 _maxDeposits) external initializer {
         __ERC4626_init(IERC20(_asset));
         __ERC20_init("fatBERA", "fatBERA");
-        __Ownable_init(_owner);
+        __AccessControl_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
+
+        // Set up roles
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+        _grantRole(REWARD_NOTIFIER_ROLE, _owner);
 
         maxDeposits = _maxDeposits;
         _pause();
@@ -77,11 +91,11 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
     /*###############################################################
                             OWNER LOGIC
     ###############################################################*/
-    function pause() external onlyOwner {
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
 
-    function unpause() external onlyOwner {
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
 
@@ -89,7 +103,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
      * @notice Updates the maximum amount of deposits allowed
      * @param newMax The new maximum deposit amount
      */
-    function setMaxDeposits(uint256 newMax) external onlyOwner {
+    function setMaxDeposits(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newMax < depositPrincipal) revert InvalidMaxDeposits();
         maxDeposits = newMax;
     }
@@ -99,7 +113,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
      *      so those tokens can be staked in a validator. This ensures yield
      *      remains in the vault, as depositPrincipal decrements.
      */
-    function withdrawPrincipal(uint256 assets, address receiver) external onlyOwner {
+    function withdrawPrincipal(uint256 assets, address receiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (assets <= 0) revert ZeroPrincipal();
         if (assets > depositPrincipal) revert ExceedsPrincipal();
 
@@ -112,7 +126,7 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
      *      that new reward tokens have arrived. This increments "rewardPerShareStored"
      *      proportionally to the total shares in existence.
      */
-    function notifyRewardAmount(address token, uint256 rewardAmount) external onlyOwner {
+    function notifyRewardAmount(address token, uint256 rewardAmount) external onlyRole(REWARD_NOTIFIER_ROLE) {
         if (rewardAmount <= 0) revert ZeroRewards();
         if (token == address(0)) revert InvalidToken();
         
@@ -207,7 +221,35 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
 
         return assetsRequired;
     }
+    /**
+     * @dev Called by user to claim any accrued rewards.
+     */
+    function claimRewards(address token, address receiver) public nonReentrant {
+        _updateRewards(msg.sender, token);
+        
+        uint256 reward = rewards[token][msg.sender];
+        if (reward > 0) {
+            rewards[token][msg.sender] = 0;
+            IERC20(token).safeTransfer(receiver, reward);
+        }
+    }
 
+    // Overloaded for multiple reward tokens
+    function claimRewards(address receiver) public nonReentrant {
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            _updateRewards(msg.sender, rewardTokens[i]);
+
+            uint256 reward = rewards[rewardTokens[i]][msg.sender];
+            if (reward > 0) {
+                rewards[rewardTokens[i]][msg.sender] = 0;
+                IERC20(rewardTokens[i]).safeTransfer(receiver, reward);
+            }
+        }
+    }
+
+    /*###############################################################
+                     WITHDRAWALS ARENT ENABLED YET
+    ###############################################################*/
     /**
      * @notice Overridden withdraw logic that also handles reward distribution.
      *         Time-locked or restricted for regular users (except via unpause or
@@ -237,32 +279,6 @@ contract fatBERA is ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable,
         depositPrincipal -= redeemedAssets;
 
         return redeemedAssets;
-    }
-
-    /**
-     * @dev Called by user to claim any accrued rewards.
-     */
-    function claimRewards(address token, address receiver) public nonReentrant {
-        _updateRewards(msg.sender, token);
-        
-        uint256 reward = rewards[token][msg.sender];
-        if (reward > 0) {
-            rewards[token][msg.sender] = 0;
-            IERC20(token).safeTransfer(receiver, reward);
-        }
-    }
-
-    // Overloaded for multiple reward tokens
-    function claimRewards(address receiver) public nonReentrant {
-        for (uint256 i = 0; i < rewardTokens.length; i++) {
-            _updateRewards(msg.sender, rewardTokens[i]);
-
-            uint256 reward = rewards[rewardTokens[i]][msg.sender];
-            if (reward > 0) {
-                rewards[rewardTokens[i]][msg.sender] = 0;
-                IERC20(rewardTokens[i]).safeTransfer(receiver, reward);
-            }
-        }
     }
 
     /*###############################################################
