@@ -37,6 +37,7 @@ contract fatBERA is
     error InvalidMaxDeposits();
     error ExceedsAvailableRewards();
     error InvalidToken();
+    error ZeroShares();
     /*###############################################################
                             STRUCTS
     ###############################################################*/
@@ -134,6 +135,9 @@ contract fatBERA is
         if (rewardAmount <= 0) revert ZeroRewards();
         if (token == address(0)) revert InvalidToken();
         
+        uint256 totalSharesCurrent = totalSupply();
+        if (totalSharesCurrent == 0) revert ZeroShares();
+
         IERC20 rewardToken = IERC20(token);
         if (rewardAmount > rewardToken.balanceOf(address(this))) revert ExceedsAvailableRewards();
 
@@ -144,15 +148,11 @@ contract fatBERA is
         }
 
         RewardData storage data = rewardData[token];
-        uint256 totalSharesCurrent = totalSupply();
-        
-        if (totalSharesCurrent > 0) {
-            data.rewardPerShareStored += FixedPointMathLib.fullMulDiv(
-                rewardAmount, 
-                1e36, 
-                totalSharesCurrent
-            );
-        }
+        data.rewardPerShareStored += FixedPointMathLib.fullMulDiv(
+            rewardAmount, 
+            1e36, 
+            totalSharesCurrent
+        );
         data.totalRewards += rewardAmount;
         emit RewardAdded(token, rewardAmount);
     }
