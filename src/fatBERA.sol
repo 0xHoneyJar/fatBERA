@@ -172,7 +172,7 @@ contract fatBERA is
      */
     function depositNative(address receiver) external payable nonReentrant returns (uint256) {
         if (msg.value == 0) revert ZeroPrincipal();
-        if (depositPrincipal + msg.value > maxDeposits) revert ExceedsMaxDeposits();
+        if (totalSupply() + msg.value > maxDeposits) revert ExceedsMaxDeposits();
         _updateRewards(receiver);
 
         // Wrap native token
@@ -197,7 +197,7 @@ contract fatBERA is
      *         increment depositPrincipal.
      */
     function deposit(uint256 assets, address receiver) public virtual override returns (uint256) {
-        if (depositPrincipal + assets > maxDeposits) revert ExceedsMaxDeposits();
+        if (totalSupply() + assets > maxDeposits) revert ExceedsMaxDeposits();
         _updateRewards(receiver);
 
         uint256 sharesMinted = super.deposit(assets, receiver);
@@ -214,7 +214,7 @@ contract fatBERA is
         _updateRewards(receiver);
 
         uint256 assetsRequired = super.previewMint(shares);
-        if (depositPrincipal + assetsRequired > maxDeposits) revert ExceedsMaxDeposits();
+        if (totalSupply() + assetsRequired > maxDeposits) revert ExceedsMaxDeposits();
 
         assetsRequired = super.mint(shares, receiver);
         depositPrincipal += assetsRequired;
