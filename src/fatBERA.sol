@@ -38,6 +38,7 @@ contract fatBERA is
     error ExceedsAvailableRewards();
     error InvalidToken();
     error ZeroShares();
+    error ExceedsMaxRewardsTokens();
     /*###############################################################
                             STRUCTS
     ###############################################################*/
@@ -65,6 +66,8 @@ contract fatBERA is
 
     // Define role constants
     bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
+
+    uint256 public MAX_REWARDS_TOKENS = 10;
 
     /*###############################################################
                             CONSTRUCTOR
@@ -100,6 +103,10 @@ contract fatBERA is
 
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
+    }
+
+    function setMaxRewardsTokens(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        MAX_REWARDS_TOKENS = newMax;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
@@ -139,11 +146,12 @@ contract fatBERA is
         if (totalSharesCurrent == 0) revert ZeroShares();
 
         IERC20 rewardToken = IERC20(token);
-        if (rewardAmount > rewardToken.balanceOf(address(this))) revert ExceedsAvailableRewards();
+        rewardToken.safeTransferFrom(msg.sender, address(this), rewardAmount);
 
         // Add to reward tokens list if new
         if (!isRewardToken[token]) {
             rewardTokens.push(token);
+            if (rewardTokens.length > MAX_REWARDS_TOKENS) revert ExceedsMaxRewardsTokens();
             isRewardToken[token] = true;
         }
 
@@ -360,8 +368,4 @@ contract fatBERA is
         }
         userRewardPerSharePaid[token][account] = data.rewardPerShareStored;
     }
-
-    /*###############################################################
-    ###############################################################*/
-    receive() external payable {}
 }
