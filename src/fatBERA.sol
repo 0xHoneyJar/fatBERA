@@ -145,7 +145,7 @@ contract fatBERA is
         if (totalSharesCurrent > 0) {
             data.rewardPerShareStored += FixedPointMathLib.fullMulDiv(
                 rewardAmount, 
-                1e18, 
+                1e36, 
                 totalSharesCurrent
             );
         }
@@ -289,10 +289,10 @@ contract fatBERA is
         uint256 earnedPerShare = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
         uint256 accountShares = balanceOf(account);
         
-        return rewards[token][account] + FixedPointMathLib.mulDiv(
+        return rewards[token][account] + FixedPointMathLib.fullMulDiv(
             accountShares, 
             earnedPerShare, 
-            1e18
+            1e36
         );
     }
 
@@ -316,10 +316,10 @@ contract fatBERA is
         
         if (accountShares > 0) {
             uint256 earnedPerShare = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
-            rewards[token][account] += FixedPointMathLib.mulDiv(
+            rewards[token][account] += FixedPointMathLib.fullMulDiv(
                 accountShares, 
                 earnedPerShare, 
-                1e18
+                1e36
             );
         }
         userRewardPerSharePaid[token][account] = data.rewardPerShareStored;
