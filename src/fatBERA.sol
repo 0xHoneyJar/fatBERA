@@ -164,6 +164,41 @@ contract fatBERA is
     function totalAssets() public view virtual override returns (uint256) {
         return totalSupply();
     }
+
+    /**
+     * @dev Returns the maximum amount of assets that can be deposited.
+     * Overrides the default implementation to enforce the maxDeposits limit.
+     */
+    function maxDeposit(address) public view virtual override returns (uint256) {
+        if (totalSupply() >= maxDeposits) return 0;
+        return maxDeposits - totalSupply();
+    }
+
+    /**
+     * @dev Returns the maximum amount of shares that can be minted.
+     * Since shares are 1:1 with assets in this vault, this is the same as maxDeposit.
+     */
+    function maxMint(address receiver) public view virtual override returns (uint256) {
+        return maxDeposit(receiver);
+    }
+    
+    /**
+     * @dev Returns the maximum amount of assets that can be withdrawn.
+     * Currently returns 0 as withdrawals are disabled.
+     * This will be updated in a future upgrade when withdrawals are enabled.
+     */
+    function maxWithdraw(address) public view virtual override returns (uint256) {
+        return 0;
+    }
+
+    /**
+     * @dev Returns the maximum amount of shares that can be redeemed.
+     * Currently returns 0 as withdrawals are disabled.
+     * This will be updated in a future upgrade when withdrawals are enabled.
+     */
+    function maxRedeem(address) public view virtual override returns (uint256) {
+        return 0;
+    }
     
     /**
      * @dev Deposit native ETH into the vault, wrapping it into WBERA. Here for better UX for users.
@@ -172,7 +207,7 @@ contract fatBERA is
      */
     function depositNative(address receiver) external payable nonReentrant returns (uint256) {
         if (msg.value == 0) revert ZeroPrincipal();
-        if (totalSupply() + msg.value > maxDeposits) revert ExceedsMaxDeposits();
+        if (msg.value > maxDeposit(receiver)) revert ExceedsMaxDeposits();
         _updateRewards(receiver);
 
         // Wrap native token
@@ -197,7 +232,6 @@ contract fatBERA is
      *         increment depositPrincipal.
      */
     function deposit(uint256 assets, address receiver) public virtual override returns (uint256) {
-        if (totalSupply() + assets > maxDeposits) revert ExceedsMaxDeposits();
         _updateRewards(receiver);
 
         uint256 sharesMinted = super.deposit(assets, receiver);
@@ -214,8 +248,6 @@ contract fatBERA is
         _updateRewards(receiver);
 
         uint256 assetsRequired = super.previewMint(shares);
-        if (totalSupply() + assetsRequired > maxDeposits) revert ExceedsMaxDeposits();
-
         assetsRequired = super.mint(shares, receiver);
         depositPrincipal += assetsRequired;
 
