@@ -21,9 +21,27 @@ source .env && forge script script/DeployFatBERA.s.sol:DeployFatBERA \
 --force \
 --skip-simulation
 
+source .env && forge script script/DeployFatBERA.s.sol:DeployFatBERA \
+--rpc-url https://woodbeard-eth-cartio.berachain.com \
+--broadcast \
+--verify \
+--verifier-url https://api.routescan.io/v2/network/testnet/evm/80000/etherscan \
+--etherscan-api-key verifyContract \
+--chain-id 80000 \
+--slow \
+--force \
+--skip-simulation
+
 ###############################################
                   DEPLOYMENTS
 ###############################################
 
-Implementation: 0x5A9C90007A3Db6fE964AB4ddD58763aa51661035
-Proxy: 0x508FD0639eFA35F42e83D6E3a0CdE8Bb957f827f
+bArtio:
+    Implementation: 0x5A9C90007A3Db6fE964AB4ddD58763aa51661035
+    Proxy: 0x508FD0639eFA35F42e83D6E3a0CdE8Bb957f827f
+
+cArtio:
+    fatBERA proxy deployed to: 0xF1E4A550772faBfc35B28b51eB8d0b6FCd1c4878
+    Implementation deployed at: 0x13c2A8921f2c3526adA7Ed87bef5881A0267B63d
+    Contract owner set to: 0x4A8c9a29b23c4eAC0D235729d5e0D035258CDFA7
+    Max deposits set to: 10000000000000000000000000
