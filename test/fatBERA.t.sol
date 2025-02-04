@@ -117,11 +117,11 @@ contract fatBERATest is Test {
         vm.prank(admin);
         wbera.transfer(address(vault), 10e18);
         vm.prank(admin);
-        vault.notifyRewardAmount( address(wbera), 10e18);
+        vault.notifyRewardAmount(address(wbera), 10e18);
 
         // Manual calculation for first reward
-        uint256 expectedRewardPerShare = (10e18 * 1e18) / 100e18; // Should be 0.1e18
-        uint256 expectedAliceReward = (100e18 * expectedRewardPerShare) / 1e18; // Should be 10e18
+        uint256 expectedRewardPerShare = (10e18 * 1e36) / 100e18; // Should be 0.1e36
+        uint256 expectedAliceReward = (100e18 * expectedRewardPerShare) / 1e36; // Should be 10e18
 
         (uint256 rewardPerShareStored, uint256 totalRewards) = vault.rewardData(address(wbera));
         assertEq(rewardPerShareStored, expectedRewardPerShare, "Reward per share calculation mismatch");
@@ -140,12 +140,12 @@ contract fatBERATest is Test {
         vault.notifyRewardAmount(address(wbera), 20e18);
 
         // Manual calculation for second reward
-        uint256 secondRewardPerShare = (20e18 * 1e18) / 200e18; // Should be 0.1e18
+        uint256 secondRewardPerShare = (20e18 * 1e36) / 200e18; // Should be 0.1e36
 
         // Alice's total expected: First reward (10) + (100 shares * 0.1 from second reward)
-        uint256 expectedAliceTotalReward = 10e18 + ((100e18 * secondRewardPerShare) / 1e18);
+        uint256 expectedAliceTotalReward = 10e18 + ((100e18 * secondRewardPerShare) / 1e36);
         // Bob's expected: (100 shares * 0.1 from second reward only)
-        uint256 expectedBobReward = (100e18 * secondRewardPerShare) / 1e18;
+        uint256 expectedBobReward = (100e18 * secondRewardPerShare) / 1e36;
 
         assertEq(vault.previewRewards(alice, address(wbera)), expectedAliceTotalReward, "Alice's second reward preview mismatch");
         assertEq(vault.previewRewards(alice, address(wbera)), 20e18, "Alice should have 20 WBERA total rewards");
