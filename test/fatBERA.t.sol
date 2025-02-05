@@ -98,7 +98,7 @@ contract fatBERATest is Test {
         assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin), "Admin should have DEFAULT_ADMIN_ROLE");
         assertEq(address(vault.asset()), address(wbera));
         assertEq(vault.paused(), true);
-        (uint256 rewardPerShareStored, uint256 totalRewards,,,,) = vault.rewardData(address(wbera));
+        (uint256 rewardPerShareStored, uint256 totalRewards,,,,,) = vault.rewardData(address(wbera));
         assertEq(rewardPerShareStored, 0);
         assertEq(totalRewards, 0);
         assertEq(vault.depositPrincipal(), 0);
