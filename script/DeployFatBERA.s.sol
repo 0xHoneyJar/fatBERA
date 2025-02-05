@@ -9,7 +9,7 @@ import {console} from "forge-std/console.sol";
 contract DeployFatBERA is Script {
     // Configuration
     uint256 constant maxDeposits = 10000000 ether;
-    address constant WBERA = 0x6969696969696969696969696969696969696969;
+    address constant WBERA = 0x7507c1dc16935B82698e4C63f2746A2fCf994dF8;
     
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -28,7 +28,7 @@ contract DeployFatBERA is Script {
             "fatBERA.sol:fatBERA",
             initData
         );
-        
+        fatBERA(proxy).setRewardsDuration(WBERA, 7 days);
         vm.stopBroadcast();
 
         console.log("fatBERA proxy deployed to: %s", proxy);

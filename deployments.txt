@@ -40,8 +40,20 @@ bArtio:
     Implementation: 0x5A9C90007A3Db6fE964AB4ddD58763aa51661035
     Proxy: 0x508FD0639eFA35F42e83D6E3a0CdE8Bb957f827f
 
+    V2:
+    fatBERA proxy deployed to: 0xE8DCac238FF63026bBA2d391bA7360561869d750
+    Implementation deployed at: 0x6fDC65462c3C5A0E670cB3aa36c8D6573c45F5E7
+    Contract owner set to: 0xD5cC24cA0C1d222cb143d0D8D02258f1e3994E60
+    Max deposits set to: 10000000000000000000000000
+
 cArtio:
     fatBERA proxy deployed to: 0xF1E4A550772faBfc35B28b51eB8d0b6FCd1c4878
     Implementation deployed at: 0x13c2A8921f2c3526adA7Ed87bef5881A0267B63d
+    Contract owner set to: 0x4A8c9a29b23c4eAC0D235729d5e0D035258CDFA7
+    Max deposits set to: 10000000000000000000000000
+
+    V2:
+    fatBERA proxy deployed to: 0xb62a9A21D98478F477e134E175Fd2003C15Cb83A
+    Implementation deployed at: 0xe1D16Cc75C9f39A2e0f5131eB39d4b634b23F301
     Contract owner set to: 0x4A8c9a29b23c4eAC0D235729d5e0D035258CDFA7
     Max deposits set to: 10000000000000000000000000
