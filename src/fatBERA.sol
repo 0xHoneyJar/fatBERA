@@ -78,6 +78,9 @@ contract fatBERA is
     uint256 public MAX_REWARDS_TOKENS;
 
     bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
+    
+    mapping(address => uint256) public vaultedShares;
+    mapping(address => bool) public isWhitelistedVault;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          CONSTRUCTOR                       */
@@ -148,7 +151,7 @@ contract fatBERA is
     function setMaxRewardsTokens(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         MAX_REWARDS_TOKENS = newMax;
     }
-
+    
     /**
      * @notice Withdraws the accumulated rounding losses for a specific reward token.
      * @param token The address of the reward token.
@@ -249,6 +252,15 @@ contract fatBERA is
         require(duration > 0, "Reward duration must be non-zero");
         data.rewardsDuration = duration;
         emit RewardsDurationUpdated(token, duration);
+    }
+
+     /**
+     * @dev Admin function to set a whitelisted vault address.
+     * Vaults are considered external contracts that hold fatBERA and
+     * should not accrue rewards.
+     */
+    function setWhitelistedVault(address vaultAddress, bool status) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        isWhitelistedVault[vaultAddress] = status;
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -442,14 +454,16 @@ contract fatBERA is
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          VIEW LOGIC                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
     /**
-     * @notice Previews accrued rewards for an account for a specific token.
-     * @param account The address of the account.
-     * @param token The reward token address.
-     * @return The total rewards accrued.
-     * @dev Calculates rewards based on current reward per share and user balance.
+     * @dev Returns the effective balance of an account for reward calculations.
+     * For a regular (non-vault) user, effective balance = wallet balance + vaultedShares.
+     * For a whitelisted vault, effective balance is 0.
      */
+    function effectiveBalance(address account) public view returns (uint256) {
+        if (isWhitelistedVault[account]) return 0;
+        return balanceOf(account) + vaultedShares[account];
+    }
+
     function previewRewards(address account, address token) external view returns (uint256) {
         RewardData storage data = rewardData[token];
         uint256 currentRewardPerShare = data.rewardPerShareStored;
@@ -460,10 +474,11 @@ contract fatBERA is
             uint256 additional = FixedPointMathLib.fullMulDiv(elapsed * data.rewardRate, 1e36, supply);
             currentRewardPerShare += additional;
         }
-        return rewards[token][account]
-            + FixedPointMathLib.fullMulDiv(
-                balanceOf(account), currentRewardPerShare - userRewardPerSharePaid[token][account], 1e36
-            );
+        return rewards[token][account] + FixedPointMathLib.fullMulDiv(
+            effectiveBalance(account),
+            currentRewardPerShare - userRewardPerSharePaid[token][account],
+            1e36
+        );
     }
 
     /**
@@ -483,17 +498,26 @@ contract fatBERA is
      * @notice Hook to update rewards during token transfers.
      * @param from The sender address.
      * @param to The recipient address.
-     * @param value The amount transferred.
      * @dev Only updates rewards if both addresses are non-zero.
      */
-    function _update(address from, address to, uint256 value) internal override {
-        // Call reward update if both addresses are non-zero (not mint or burn)
+    function _update(address from, address to, uint256 amount) internal override {
         if (from != address(0) && to != address(0)) {
-            _updateRewards(from);
-            _updateRewards(to);
+            if (!isWhitelistedVault[from] && isWhitelistedVault[to]) {
+                // Depositing to a whitelisted vault.
+                _updateRewards(from);
+                vaultedShares[from] += amount;
+            } else if (isWhitelistedVault[from] && !isWhitelistedVault[to]) {
+                // Withdrawing from a whitelisted vault.
+                _updateRewards(to);
+                if (vaultedShares[to] < amount) revert("Insufficient vaulted shares");
+                vaultedShares[to] -= amount;
+            } else {
+                // Normal transfer between non‑vault addresses (or vault <-> vault, though vaults have no effective balance).
+                _updateRewards(from);
+                _updateRewards(to);
+            }
         }
-        // Proceed with the normal token update logic.
-        super._update(from, to, value);
+        super._update(from, to, amount);
     }
 
     /**
@@ -516,11 +540,10 @@ contract fatBERA is
     function _updateRewards(address account, address token) internal {
         _updateReward(token);
         RewardData storage data = rewardData[token];
-        uint256 accountShares = balanceOf(account);
-
-        if (accountShares > 0) {
+        uint256 effectiveBal = effectiveBalance(account);
+        if (effectiveBal > 0) {
             uint256 earned = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
-            rewards[token][account] += FixedPointMathLib.fullMulDiv(accountShares, earned, 1e36);
+            rewards[token][account] += FixedPointMathLib.fullMulDiv(effectiveBal, earned, 1e36);
         }
         userRewardPerSharePaid[token][account] = data.rewardPerShareStored;
     }

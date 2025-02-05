@@ -18,10 +18,18 @@ contract DeployFatBERA is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        bytes memory initData = abi.encodeWithSelector(fatBERA.initialize.selector, WBERA, deployer, maxDeposits);
+        bytes memory initData = abi.encodeWithSelector(
+            fatBERA.initialize.selector,
+            WBERA,
+            deployer,
+            maxDeposits
+        );
 
-        address proxy = Upgrades.deployUUPSProxy("fatBERA.sol:fatBERA", initData);
-
+        address proxy = Upgrades.deployUUPSProxy(
+            "fatBERA.sol:fatBERA",
+            initData
+        );
+        
         fatBERA(proxy).setRewardsDuration(WBERA, 7 days);
 
         // Approve and deposit 1 WBERA
