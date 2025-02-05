@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import "../src/fatBERA.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {console} from "forge-std/console.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract DeployFatBERA is Script {
     // Configuration
@@ -21,6 +22,12 @@ contract DeployFatBERA is Script {
 
         address proxy = Upgrades.deployUUPSProxy("fatBERA.sol:fatBERA", initData);
 
+        fatBERA(proxy).setRewardsDuration(WBERA, 7 days);
+
+        // Approve and deposit 1 WBERA
+        IERC20(WBERA).approve(proxy, 1 ether);
+        fatBERA(proxy).deposit(1 ether, deployer);
+
         vm.stopBroadcast();
 
         console.log("fatBERA proxy deployed to: %s", proxy);
@@ -28,5 +35,6 @@ contract DeployFatBERA is Script {
         console.log("Contract owner set to: %s", deployer);
         console.log("Max deposits set to: %d", maxDeposits);
         console.log("Contract paused by default");
+        console.log("Initial deposit of 1 WBERA made by admin");
     }
 }
