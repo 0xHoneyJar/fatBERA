@@ -10,9 +10,10 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/ut
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-/*###############################################################
-                            INTERFACES
-###############################################################*/
+/*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+/*                          INTERFACES                        */
+/*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
 interface IWETH is IERC20 {
     function deposit() external payable;
     function withdraw(uint256 amount) external;
@@ -27,9 +28,9 @@ contract fatBERA is
 {
     using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
-    /*###############################################################
-                            ERRORS
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          ERRORS                            */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     error ZeroPrincipal();
     error ExceedsPrincipal();
@@ -40,9 +41,9 @@ contract fatBERA is
     error InvalidToken();
     error ZeroShares();
     error ExceedsMaxRewardsTokens();
-    /*###############################################################
-                            STRUCTS
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          STRUCTS                           */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     struct RewardData {
         uint256 rewardPerShareStored;
@@ -54,34 +55,34 @@ contract fatBERA is
         uint256 remainingRewards;
     }
 
-    /*###############################################################
-                            EVENTS
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          Events                            */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     event RewardAdded(address indexed token, uint256 rewardAmount);
     event RewardsDurationUpdated(address indexed token, uint256 newDuration);
 
-    /*###############################################################
-                            STORAGE
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          STORAGE                           */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     uint256 public depositPrincipal;
     uint256 public maxDeposits;
 
-    // Reward tracking per token
     mapping(address => RewardData) public rewardData;
     mapping(address => mapping(address => uint256)) public userRewardPerSharePaid;
     mapping(address => mapping(address => uint256)) public rewards;
 
     address[] public rewardTokens;
     mapping(address => bool) public isRewardToken;
-
-    // Define role constants
-    bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
-
     uint256 public MAX_REWARDS_TOKENS;
 
-    /*###############################################################
-                            CONSTRUCTOR
-    ###############################################################*/
+    bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          CONSTRUCTOR                       */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /**
      * @notice Contract constructor.
      * @dev Disables initializers to prevent misuse.
@@ -90,9 +91,10 @@ contract fatBERA is
     constructor() {
         _disableInitializers();
     }
-    /*###############################################################
-                            INITIALIZER
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          Events                            */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /**
      * @notice Initializes the contract variables and parent contracts.
      * @param _asset The address of the underlying asset.
@@ -100,7 +102,6 @@ contract fatBERA is
      * @param _maxDeposits The maximum deposit limit.
      * @dev Calls initializer functions from parent contracts and sets up admin roles.
      */
-
     function initialize(address _asset, address _owner, uint256 _maxDeposits) external initializer {
         __ERC4626_init(IERC20(_asset));
         __ERC20_init("fatBERA", "fatBERA");
@@ -119,9 +120,10 @@ contract fatBERA is
         _pause();
     }
 
-    /*###############################################################
-                            OWNER LOGIC
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          OWNER LOGIC                       */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /**
      * @notice Pauses contract operations.
      * @dev Only callable by admin.
@@ -249,9 +251,10 @@ contract fatBERA is
         emit RewardsDurationUpdated(token, duration);
     }
 
-    /*###############################################################
-                            EXTERNAL LOGIC
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                        EXTERNAL LOGIC                      */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /**
      * @notice Returns the total assets in the vault.
      * @return The total assets, equal to the total supply.
@@ -393,9 +396,10 @@ contract fatBERA is
         }
     }
 
-    /*###############################################################
-                     WITHDRAWALS ARENT ENABLED YET
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                WITHDRAWALS ARENT ENABLED YET               */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /**
      * @notice Withdraws assets from the vault.
      * @param assets The amount of assets to withdraw.
@@ -435,9 +439,10 @@ contract fatBERA is
         return redeemedAssets;
     }
 
-    /*###############################################################
-                            VIEW LOGIC
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          VIEW LOGIC                        */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /**
      * @notice Previews accrued rewards for an account for a specific token.
      * @param account The address of the account.
@@ -470,9 +475,10 @@ contract fatBERA is
         return rewardTokens;
     }
 
-    /*###############################################################
-                            INTERNAL LOGIC
-    ###############################################################*/
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       INTERNAL LOGIC                       */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /**
      * @notice Hook to update rewards during token transfers.
      * @param from The sender address.
