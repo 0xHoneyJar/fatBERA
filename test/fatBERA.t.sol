@@ -1228,4 +1228,56 @@ contract fatBERATest is Test {
             "Attacker reward preview exceeds expected minimal accrual"
         );
     }
+
+    /**
+     * @dev Test to ensure that transferring shares does not allow a recipient
+     *      to claim rewards accrued before the transfer.
+     *      This test fails in the vulnerable contract (without reward update on transfer)
+     *      and passes once the fix (calling _updateRewards on share transfers) is applied.
+     */
+    function test_TransferDoesNotStealRewards() public {
+        // Alice deposits 100 WBERA
+        uint256 depositAmount = 100e18;
+        vm.prank(alice);
+        vault.deposit(depositAmount, alice);
+        
+        // Notify a reward of 10 WBERA
+        uint256 rewardAmount = 10e18;
+        vm.prank(admin);
+        vault.notifyRewardAmount(address(wbera), rewardAmount);
+        
+        // Warp forward by half the reward duration (3.5 days)
+        uint256 halfPeriod = 7 days / 2;
+        vm.warp(block.timestamp + halfPeriod);
+        
+        // Capture Alice's accrued rewards before the transfer
+        uint256 aliceRewardsBefore = vault.previewRewards(alice, address(wbera));
+        assertGt(aliceRewardsBefore, 0, "Alice should have accrued rewards before transfer");
+        
+        // Alice transfers half of her shares (50e18) to Bob
+        uint256 transferAmount = depositAmount / 2;
+        vm.prank(alice);
+        vault.transfer(bob, transferAmount);
+        
+        // Immediately after transfer:
+        // 1. Alice's rewards should remain the same (she keeps rewards accrued before transfer)
+        uint256 aliceRewardsAfter = vault.previewRewards(alice, address(wbera));
+        assertEq(aliceRewardsAfter, aliceRewardsBefore, "Alice's rewards should not change after transfer");
+        
+        // 2. Bob should start with 0 rewards (should not inherit Alice's rewards)
+        uint256 bobRewardsAfter = vault.previewRewards(bob, address(wbera));
+        assertEq(bobRewardsAfter, 0, "Bob should not have any accrued rewards from transferred shares");
+        
+        // 3. If Bob claims rewards immediately, he should get nothing
+        uint256 bobBalanceBefore = wbera.balanceOf(bob);
+        vm.prank(bob);
+        vault.claimRewards(bob);
+        uint256 bobClaimed = wbera.balanceOf(bob) - bobBalanceBefore;
+        assertEq(bobClaimed, 0, "Bob should not be able to claim any rewards from transferred shares");
+
+        // 4. After some time passes, Bob should start accruing new rewards
+        vm.warp(block.timestamp + 1 days);
+        uint256 bobRewardsLater = vault.previewRewards(bob, address(wbera));
+        assertGt(bobRewardsLater, 0, "Bob should accrue new rewards after time passes");
+    }
 }
