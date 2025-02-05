@@ -45,11 +45,18 @@ contract fatBERA is
     struct RewardData {
         uint256 rewardPerShareStored;
         uint256 totalRewards;
+        uint256 rewardsDuration;
+        uint256 periodFinish;
+        uint256 rewardRate;
+        uint256 lastUpdateTime;
     }
+
     /*###############################################################
                             EVENTS
     ###############################################################*/
     event RewardAdded(address indexed token, uint256 rewardAmount);
+    event RewardsDurationUpdated(address indexed token, uint256 newDuration);
+
     /*###############################################################
                             STORAGE
     ###############################################################*/
@@ -67,7 +74,7 @@ contract fatBERA is
     // Define role constants
     bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
 
-    uint256 public MAX_REWARDS_TOKENS = 10;
+    uint256 public MAX_REWARDS_TOKENS;
 
     /*###############################################################
                             CONSTRUCTOR
@@ -89,6 +96,8 @@ contract fatBERA is
         // Set up roles
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _grantRole(REWARD_NOTIFIER_ROLE, _owner);
+
+        MAX_REWARDS_TOKENS = 10;
 
         maxDeposits = _maxDeposits;
         _pause();
@@ -135,8 +144,8 @@ contract fatBERA is
 
     /**
      * @dev Allows owner (or another trusted source) to notify the contract
-     *      that new reward tokens have arrived. This increments "rewardPerShareStored"
-     *      proportionally to the total shares in existence.
+     *      that new reward tokens have arrived. Rewards are now distributed
+     *      over a duration to mitigate sandwich attacks.
      */
     function notifyRewardAmount(address token, uint256 rewardAmount) external onlyRole(REWARD_NOTIFIER_ROLE) {
         if (rewardAmount <= 0) revert ZeroRewards();
@@ -156,13 +165,35 @@ contract fatBERA is
         }
 
         RewardData storage data = rewardData[token];
-        data.rewardPerShareStored += FixedPointMathLib.fullMulDiv(
-            rewardAmount, 
-            1e36, 
-            totalSharesCurrent
-        );
+        // Ensure rewards duration is set
+        require(data.rewardsDuration > 0, "Rewards duration not set");
+
+        _updateReward(token);
+
+        if (block.timestamp >= data.periodFinish) {
+            data.rewardRate = rewardAmount / data.rewardsDuration;
+        } else {
+            uint256 remaining = data.periodFinish - block.timestamp;
+            uint256 leftover = remaining * data.rewardRate;
+            data.rewardRate = (rewardAmount + leftover) / data.rewardsDuration;
+        }
+
+        data.lastUpdateTime = block.timestamp;
+        data.periodFinish = block.timestamp + data.rewardsDuration;
         data.totalRewards += rewardAmount;
         emit RewardAdded(token, rewardAmount);
+    }
+
+    /**
+     * @notice Allows admin to set the rewards duration for a specific reward token.
+     *         Can only be set after the current reward period has ended.
+     */
+    function setRewardsDuration(address token, uint256 duration) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        RewardData storage data = rewardData[token];
+        require(block.timestamp > data.periodFinish, "Reward period still active");
+        require(duration > 0, "Reward duration must be non-zero");
+        data.rewardsDuration = duration;
+        emit RewardsDurationUpdated(token, duration);
     }
 
     /*###############################################################
@@ -270,7 +301,7 @@ contract fatBERA is
      */
     function claimRewards(address token, address receiver) public nonReentrant {
         _updateRewards(msg.sender, token);
-        
+
         uint256 reward = rewards[token][msg.sender];
         if (reward > 0) {
             rewards[token][msg.sender] = 0;
@@ -330,14 +361,15 @@ contract fatBERA is
     ###############################################################*/
     function previewRewards(address account, address token) external view returns (uint256) {
         RewardData storage data = rewardData[token];
-        uint256 earnedPerShare = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
-        uint256 accountShares = balanceOf(account);
-        
-        return rewards[token][account] + FixedPointMathLib.fullMulDiv(
-            accountShares, 
-            earnedPerShare, 
-            1e36
-        );
+        uint256 currentRewardPerShare = data.rewardPerShareStored;
+        uint256 supply = totalSupply();
+        if (supply > 0) {
+            uint256 lastApplicable = block.timestamp < data.periodFinish ? block.timestamp : data.periodFinish;
+            uint256 elapsed = lastApplicable - data.lastUpdateTime;
+            uint256 additional = FixedPointMathLib.fullMulDiv(elapsed * data.rewardRate, 1e36, supply);
+            currentRewardPerShare += additional;
+        }
+        return rewards[token][account] + FixedPointMathLib.fullMulDiv(balanceOf(account), currentRewardPerShare - userRewardPerSharePaid[token][account], 1e36);
     }
 
     // Helper to get all reward tokens
@@ -348,24 +380,51 @@ contract fatBERA is
     /*###############################################################
                             INTERNAL LOGIC
     ###############################################################*/
+    /**
+     * @dev Internal helper to update rewards for all reward tokens for a given account.
+     */
     function _updateRewards(address account) internal {
         for (uint256 i = 0; i < rewardTokens.length; i++) {
             _updateRewards(account, rewardTokens[i]);
         }
     }
 
+    /**
+     * @dev Internal helper to update rewards for a specific reward token for a given account.
+     */
     function _updateRewards(address account, address token) internal {
+        _updateReward(token);
         RewardData storage data = rewardData[token];
         uint256 accountShares = balanceOf(account);
-        
+
         if (accountShares > 0) {
-            uint256 earnedPerShare = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
-            rewards[token][account] += FixedPointMathLib.fullMulDiv(
-                accountShares, 
-                earnedPerShare, 
-                1e36
-            );
+            uint256 earned = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
+            rewards[token][account] += FixedPointMathLib.fullMulDiv(accountShares, earned, 1e36);
         }
         userRewardPerSharePaid[token][account] = data.rewardPerShareStored;
+    }
+
+    /**
+     * @dev Internal helper to update global reward info for a specific reward token.
+     */
+    function _updateReward(address token) internal {
+        RewardData storage data = rewardData[token];
+        uint256 lastApplicable = _lastTimeRewardApplicable(token);
+        if (totalSupply() > 0) {
+            uint256 elapsed = lastApplicable - data.lastUpdateTime;
+            if (elapsed > 0) {
+                uint256 additional = FixedPointMathLib.fullMulDiv(elapsed * data.rewardRate, 1e36, totalSupply());
+                data.rewardPerShareStored += additional;
+            }
+        }
+        data.lastUpdateTime = lastApplicable;
+    }
+
+    /**
+     * @dev Internal helper to determine the last applicable timestamp for a reward.
+     */
+    function _lastTimeRewardApplicable(address token) internal view returns (uint256) {
+        RewardData storage data = rewardData[token];
+        return block.timestamp < data.periodFinish ? block.timestamp : data.periodFinish;
     }
 }
