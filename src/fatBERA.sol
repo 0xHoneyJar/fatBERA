@@ -381,6 +381,21 @@ contract fatBERA is
                             INTERNAL LOGIC
     ###############################################################*/
     /**
+     * @dev Overrides the ERC20Upgradeable _update function to update rewards for transfers.
+     *      This hook is called on every token balance change. We only update rewards
+     *      for transfer actions (i.e. where both `from` and `to` are non-zero).
+     */
+    function _update(address from, address to, uint256 value) internal override {
+        // Call reward update if both addresses are non-zero (not mint or burn)
+        if (from != address(0) && to != address(0)) {
+            _updateRewards(from);
+            _updateRewards(to);
+        }
+        // Proceed with the normal token update logic.
+        super._update(from, to, value);
+    }
+    
+    /**
      * @dev Internal helper to update rewards for all reward tokens for a given account.
      */
     function _updateRewards(address account) internal {
