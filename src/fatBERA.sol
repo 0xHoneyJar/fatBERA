@@ -92,6 +92,7 @@ contract fatBERA is
         __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
 
         // Set up roles
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
