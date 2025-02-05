@@ -75,7 +75,9 @@ contract fatBERA is
     bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
 
     uint256 public MAX_REWARDS_TOKENS;
-
+    
+    mapping(address => uint256) public vaultedShares;
+    mapping(address => bool) public isWhitelistedVault;
     /*###############################################################
                             CONSTRUCTOR
     ###############################################################*/
@@ -117,7 +119,7 @@ contract fatBERA is
     function setMaxRewardsTokens(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         MAX_REWARDS_TOKENS = newMax;
     }
-
+    
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /**
@@ -194,6 +196,15 @@ contract fatBERA is
         require(duration > 0, "Reward duration must be non-zero");
         data.rewardsDuration = duration;
         emit RewardsDurationUpdated(token, duration);
+    }
+
+     /**
+     * @dev Admin function to set a whitelisted vault address.
+     * Vaults are considered external contracts that hold fatBERA and
+     * should not accrue rewards.
+     */
+    function setWhitelistedVault(address vaultAddress, bool status) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        isWhitelistedVault[vaultAddress] = status;
     }
 
     /*###############################################################
@@ -359,6 +370,16 @@ contract fatBERA is
     /*###############################################################
                             VIEW LOGIC
     ###############################################################*/
+    /**
+     * @dev Returns the effective balance of an account for reward calculations.
+     * For a regular (non-vault) user, effective balance = wallet balance + vaultedShares.
+     * For a whitelisted vault, effective balance is 0.
+     */
+    function effectiveBalance(address account) public view returns (uint256) {
+        if (isWhitelistedVault[account]) return 0;
+        return balanceOf(account) + vaultedShares[account];
+    }
+
     function previewRewards(address account, address token) external view returns (uint256) {
         RewardData storage data = rewardData[token];
         uint256 currentRewardPerShare = data.rewardPerShareStored;
@@ -369,7 +390,11 @@ contract fatBERA is
             uint256 additional = FixedPointMathLib.fullMulDiv(elapsed * data.rewardRate, 1e36, supply);
             currentRewardPerShare += additional;
         }
-        return rewards[token][account] + FixedPointMathLib.fullMulDiv(balanceOf(account), currentRewardPerShare - userRewardPerSharePaid[token][account], 1e36);
+        return rewards[token][account] + FixedPointMathLib.fullMulDiv(
+            effectiveBalance(account),
+            currentRewardPerShare - userRewardPerSharePaid[token][account],
+            1e36
+        );
     }
 
     // Helper to get all reward tokens
@@ -381,18 +406,32 @@ contract fatBERA is
                             INTERNAL LOGIC
     ###############################################################*/
     /**
-     * @dev Overrides the ERC20Upgradeable _update function to update rewards for transfers.
-     *      This hook is called on every token balance change. We only update rewards
-     *      for transfer actions (i.e. where both `from` and `to` are non-zero).
+     * @dev Overrides the ERC20Upgradeable _update function to adjust vaultedShares on transfers.
+     *
+     * If tokens are transferred from a non‑vault address to a whitelisted vault (i.e. a user "deposits" into an external vault),
+     * we update the sender’s rewards and increase their vaultedShares (so their effective balance stays unchanged).
+     * Conversely, if tokens move from a whitelisted vault to a non‑vault address (i.e. a user is withdrawing from an external vault),
+     * we update the recipient’s rewards and reduce their vaultedShares.
+     * For all other transfers, rewards for both parties are updated normally.
      */
-    function _update(address from, address to, uint256 value) internal override {
-        // Call reward update if both addresses are non-zero (not mint or burn)
+    function _update(address from, address to, uint256 amount) internal override {
         if (from != address(0) && to != address(0)) {
-            _updateRewards(from);
-            _updateRewards(to);
+            if (!isWhitelistedVault[from] && isWhitelistedVault[to]) {
+                // Depositing to a whitelisted vault.
+                _updateRewards(from);
+                vaultedShares[from] += amount;
+            } else if (isWhitelistedVault[from] && !isWhitelistedVault[to]) {
+                // Withdrawing from a whitelisted vault.
+                _updateRewards(to);
+                if (vaultedShares[to] < amount) revert("Insufficient vaulted shares");
+                vaultedShares[to] -= amount;
+            } else {
+                // Normal transfer between non‑vault addresses (or vault <-> vault, though vaults have no effective balance).
+                _updateRewards(from);
+                _updateRewards(to);
+            }
         }
-        // Proceed with the normal token update logic.
-        super._update(from, to, value);
+        super._update(from, to, amount);
     }
     
     /**
@@ -406,15 +445,15 @@ contract fatBERA is
 
     /**
      * @dev Internal helper to update rewards for a specific reward token for a given account.
+     * Uses effectiveBalance so that rewards accrue for tokens locked in external vaults.
      */
     function _updateRewards(address account, address token) internal {
         _updateReward(token);
         RewardData storage data = rewardData[token];
-        uint256 accountShares = balanceOf(account);
-
-        if (accountShares > 0) {
+        uint256 effectiveBal = effectiveBalance(account);
+        if (effectiveBal > 0) {
             uint256 earned = data.rewardPerShareStored - userRewardPerSharePaid[token][account];
-            rewards[token][account] += FixedPointMathLib.fullMulDiv(accountShares, earned, 1e36);
+            rewards[token][account] += FixedPointMathLib.fullMulDiv(effectiveBal, earned, 1e36);
         }
         userRewardPerSharePaid[token][account] = data.rewardPerShareStored;
     }
