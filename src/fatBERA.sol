@@ -18,7 +18,7 @@ interface IWETH is IERC20 {
     function withdraw(uint256 amount) external;
 }
 
-contract fatBERA is 
+contract fatBERA is
     ERC4626Upgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
@@ -30,6 +30,7 @@ contract fatBERA is
     /*###############################################################
                             ERRORS
     ###############################################################*/
+
     error ZeroPrincipal();
     error ExceedsPrincipal();
     error ZeroRewards();
@@ -42,6 +43,7 @@ contract fatBERA is
     /*###############################################################
                             STRUCTS
     ###############################################################*/
+
     struct RewardData {
         uint256 rewardPerShareStored;
         uint256 totalRewards;
@@ -63,12 +65,12 @@ contract fatBERA is
     ###############################################################*/
     uint256 public depositPrincipal;
     uint256 public maxDeposits;
-    
+
     // Reward tracking per token
     mapping(address => RewardData) public rewardData;
     mapping(address => mapping(address => uint256)) public userRewardPerSharePaid;
     mapping(address => mapping(address => uint256)) public rewards;
-    
+
     address[] public rewardTokens;
     mapping(address => bool) public isRewardToken;
 
@@ -80,6 +82,10 @@ contract fatBERA is
     /*###############################################################
                             CONSTRUCTOR
     ###############################################################*/
+    /**
+     * @notice Contract constructor.
+     * @dev Disables initializers to prevent misuse.
+     */
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -87,6 +93,14 @@ contract fatBERA is
     /*###############################################################
                             INITIALIZER
     ###############################################################*/
+    /**
+     * @notice Initializes the contract variables and parent contracts.
+     * @param _asset The address of the underlying asset.
+     * @param _owner The admin owner address.
+     * @param _maxDeposits The maximum deposit limit.
+     * @dev Calls initializer functions from parent contracts and sets up admin roles.
+     */
+
     function initialize(address _asset, address _owner, uint256 _maxDeposits) external initializer {
         __ERC4626_init(IERC20(_asset));
         __ERC20_init("fatBERA", "fatBERA");
@@ -108,29 +122,54 @@ contract fatBERA is
     /*###############################################################
                             OWNER LOGIC
     ###############################################################*/
+    /**
+     * @notice Pauses contract operations.
+     * @dev Only callable by admin.
+     */
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
 
+    /**
+     * @notice Unpauses contract operations.
+     * @dev Only callable by admin.
+     */
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
 
+    /**
+     * @notice Sets the maximum number of allowed reward tokens.
+     * @param newMax The new maximum reward tokens.
+     * @dev Only callable by admin.
+     */
     function setMaxRewardsTokens(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         MAX_REWARDS_TOKENS = newMax;
     }
 
+    /**
+     * @notice Withdraws the accumulated rounding losses for a specific reward token.
+     * @param token The address of the reward token.
+     * @param receiver The address receiving the rounded lost rewards.
+     * @dev Only callable by admin.
+     */
     function withdrawRemainingRewards(address token, address receiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 amount = rewardData[token].remainingRewards;
         rewardData[token].remainingRewards = 0;
         IERC20(token).safeTransfer(receiver, amount);
     }
 
+    /**
+     * @notice Authorizes an upgrade of the contract implementation.
+     * @param newImplementation The address of the new implementation.
+     * @dev Only callable by admin.
+     */
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /**
-     * @notice Updates the maximum amount of deposits allowed
-     * @param newMax The new maximum deposit amount
+     * @notice Updates the maximum deposit limit.
+     * @param newMax The new maximum deposit limit.
+     * @dev Reverts if newMax is less than the current deposit principal.
      */
     function setMaxDeposits(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newMax < depositPrincipal) revert InvalidMaxDeposits();
@@ -138,9 +177,10 @@ contract fatBERA is
     }
 
     /**
-     * @dev Optional function for the owner to withdraw principal deposits
-     *      so those tokens can be staked in a validator. This ensures yield
-     *      remains in the vault, as depositPrincipal decrements.
+     * @notice Allows admin to withdraw principal deposits.
+     * @param assets The amount of principal tokens to withdraw.
+     * @param receiver The address receiving the withdrawn tokens.
+     * @dev Reverts if assets is zero or exceeds the deposit principal.
      */
     function withdrawPrincipal(uint256 assets, address receiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (assets <= 0) revert ZeroPrincipal();
@@ -151,14 +191,15 @@ contract fatBERA is
     }
 
     /**
-     * @dev Allows owner (or another trusted source) to notify the contract
-     *      that new reward tokens have arrived. Rewards are now distributed
-     *      over a duration to mitigate sandwich attacks.
+     * @notice Notifies the contract of new reward tokens.
+     * @param token The address of the reward token.
+     * @param rewardAmount The amount of reward tokens to distribute.
+     * @dev Updates reward rate and accumulates any rounding losses, ensuring exact division when reward period has ended.
      */
     function notifyRewardAmount(address token, uint256 rewardAmount) external onlyRole(REWARD_NOTIFIER_ROLE) {
         if (rewardAmount <= 0) revert ZeroRewards();
         if (token == address(0)) revert InvalidToken();
-        
+
         uint256 totalSharesCurrent = totalSupply();
         if (totalSharesCurrent == 0) revert ZeroShares();
 
@@ -195,8 +236,10 @@ contract fatBERA is
     }
 
     /**
-     * @notice Allows admin to set the rewards duration for a specific reward token.
-     *         Can only be set after the current reward period has ended.
+     * @notice Sets the rewards duration for a given reward token.
+     * @param token The address of the reward token.
+     * @param duration The new rewards duration.
+     * @dev Only callable by admin after the current reward period has ended.
      */
     function setRewardsDuration(address token, uint256 duration) external onlyRole(DEFAULT_ADMIN_ROLE) {
         RewardData storage data = rewardData[token];
@@ -210,17 +253,18 @@ contract fatBERA is
                             EXTERNAL LOGIC
     ###############################################################*/
     /**
-     * @dev Override to return only totalSupply, ignoring any extra tokens from yield or
-     * tokens removed by owner to stake in validator. Shares are always worth 1 WBERA and
-     * all yield is handled by the rewards logic.
+     * @notice Returns the total assets in the vault.
+     * @return The total assets, equal to the total supply.
+     * @dev Overrides default behavior to ignore yield-related tokens.
      */
     function totalAssets() public view virtual override returns (uint256) {
         return totalSupply();
     }
 
     /**
-     * @dev Returns the maximum amount of assets that can be deposited.
-     * Overrides the default implementation to enforce the maxDeposits limit.
+     * @notice Returns the maximum amount of assets that can be deposited.
+     * @return The available deposit amount.
+     * @dev The input parameter is unused; functionality is based solely on maxDeposits.
      */
     function maxDeposit(address) public view virtual override returns (uint256) {
         if (totalSupply() >= maxDeposits) return 0;
@@ -228,35 +272,38 @@ contract fatBERA is
     }
 
     /**
-     * @dev Returns the maximum amount of shares that can be minted.
-     * Since shares are 1:1 with assets in this vault, this is the same as maxDeposit.
+     * @notice Returns the maximum number of shares that can be minted.
+     * @param receiver The address for which to query.
+     * @return The maximum shares that can be minted.
+     * @dev Since shares map 1:1 to assets, this is equal to maxDeposit.
      */
     function maxMint(address receiver) public view virtual override returns (uint256) {
         return maxDeposit(receiver);
     }
-    
+
     /**
-     * @dev Returns the maximum amount of assets that can be withdrawn.
-     * Currently returns 0 as withdrawals are disabled.
-     * This will be updated in a future upgrade when withdrawals are enabled.
+     * @notice Returns the maximum amount of assets that can be withdrawn.
+     * @return Always returns 0.
+     * @dev The input parameter is unused; withdrawals are currently disabled.
      */
     function maxWithdraw(address) public view virtual override returns (uint256) {
         return 0;
     }
 
     /**
-     * @dev Returns the maximum amount of shares that can be redeemed.
-     * Currently returns 0 as withdrawals are disabled.
-     * This will be updated in a future upgrade when withdrawals are enabled.
+     * @notice Returns the maximum number of shares that can be redeemed.
+     * @return Always returns 0.
+     * @dev The input parameter is unused; withdrawals are currently disabled.
      */
     function maxRedeem(address) public view virtual override returns (uint256) {
         return 0;
     }
-    
+
     /**
-     * @dev Deposit native ETH into the vault, wrapping it into WBERA. Here for better UX for users.
-     * @param receiver The address to receive the shares.
+     * @notice Deposits native ETH, wraps it, and mints vault shares.
+     * @param receiver The address receiving the minted shares.
      * @return The number of shares minted.
+     * @dev Wraps ETH to WBERA and bypasses ERC4626 deposit since assets are already provided.
      */
     function depositNative(address receiver) external payable nonReentrant returns (uint256) {
         if (msg.value == 0) revert ZeroPrincipal();
@@ -267,22 +314,25 @@ contract fatBERA is
         IWETH weth = IWETH(asset());
         weth.deposit{value: msg.value}();
 
-        // Calculate shares directly using previewDeposit
+        // Calculate shares using previewDeposit
         uint256 shares = previewDeposit(msg.value);
-        
-        // Bypass ERC4626 deposit and mint directly (we already have the assets)
+
+        // Bypass ERC4626 deposit and mint directly (assets already held)
         _mint(receiver, shares);
         depositPrincipal += msg.value;
 
-        // Manually emit Deposit event to match ERC4626 spec
+        // Emit Deposit event to match ERC4626 spec
         emit Deposit(msg.sender, receiver, msg.value, shares);
 
         return shares;
     }
 
     /**
-     * @notice Overridden deposit logic to account for rewards, then
-     *         increment depositPrincipal.
+     * @notice Deposits assets into the vault and updates rewards.
+     * @param assets The amount of assets to deposit.
+     * @param receiver The address receiving the shares.
+     * @return The number of shares minted.
+     * @dev Overrides the parent deposit function and increments depositPrincipal.
      */
     function deposit(uint256 assets, address receiver) public virtual override returns (uint256) {
         _updateRewards(receiver);
@@ -294,8 +344,11 @@ contract fatBERA is
     }
 
     /**
-     * @notice Overridden mint logic with same reward update approach,
-     *         and consistent depositPrincipal increments.
+     * @notice Mints shares by depositing assets.
+     * @param shares The number of shares to mint.
+     * @param receiver The address receiving the minted shares.
+     * @return The amount of assets required.
+     * @dev Overrides the parent mint function and increments depositPrincipal.
      */
     function mint(uint256 shares, address receiver) public virtual override returns (uint256) {
         _updateRewards(receiver);
@@ -307,8 +360,12 @@ contract fatBERA is
         return assetsRequired;
     }
     /**
-     * @dev Called by user to claim any accrued rewards.
+     * @notice Claims accrued rewards for a specific reward token.
+     * @param token The address of the reward token.
+     * @param receiver The address receiving the claimed rewards.
+     * @dev Updates rewards prior to claiming and resets the user's reward balance.
      */
+
     function claimRewards(address token, address receiver) public nonReentrant {
         _updateRewards(msg.sender, token);
 
@@ -319,7 +376,11 @@ contract fatBERA is
         }
     }
 
-    // Overloaded for multiple reward tokens
+    /**
+     * @notice Claims accrued rewards for all reward tokens.
+     * @param receiver The address receiving the claimed rewards.
+     * @dev Iterates through all reward tokens, updates rewards, and transfers available rewards.
+     */
     function claimRewards(address receiver) public nonReentrant {
         for (uint256 i = 0; i < rewardTokens.length; i++) {
             _updateRewards(msg.sender, rewardTokens[i]);
@@ -336,9 +397,12 @@ contract fatBERA is
                      WITHDRAWALS ARENT ENABLED YET
     ###############################################################*/
     /**
-     * @notice Overridden withdraw logic that also handles reward distribution.
-     *         Time-locked or restricted for regular users (except via unpause or
-     *         specific chain events enabling principal withdrawals).
+     * @notice Withdraws assets from the vault.
+     * @param assets The amount of assets to withdraw.
+     * @param receiver The address receiving the assets.
+     * @param owner The owner of the shares to be withdrawn.
+     * @return The number of burned shares.
+     * @dev Updates rewards and decrements depositPrincipal. Withdrawals are subject to pause conditions.
      */
     function withdraw(uint256 assets, address receiver, address owner)
         public
@@ -355,7 +419,12 @@ contract fatBERA is
     }
 
     /**
-     * @notice Overridden redeem logic that also handles reward distribution.
+     * @notice Redeems shares for the underlying assets.
+     * @param shares The number of shares to redeem.
+     * @param receiver The address receiving the assets.
+     * @param owner The owner of the shares.
+     * @return The amount of redeemed assets.
+     * @dev Updates rewards and decrements depositPrincipal. Withdrawals are subject to pause conditions.
      */
     function redeem(uint256 shares, address receiver, address owner) public override whenNotPaused returns (uint256) {
         _updateRewards(owner);
@@ -369,6 +438,13 @@ contract fatBERA is
     /*###############################################################
                             VIEW LOGIC
     ###############################################################*/
+    /**
+     * @notice Previews accrued rewards for an account for a specific token.
+     * @param account The address of the account.
+     * @param token The reward token address.
+     * @return The total rewards accrued.
+     * @dev Calculates rewards based on current reward per share and user balance.
+     */
     function previewRewards(address account, address token) external view returns (uint256) {
         RewardData storage data = rewardData[token];
         uint256 currentRewardPerShare = data.rewardPerShareStored;
@@ -379,10 +455,17 @@ contract fatBERA is
             uint256 additional = FixedPointMathLib.fullMulDiv(elapsed * data.rewardRate, 1e36, supply);
             currentRewardPerShare += additional;
         }
-        return rewards[token][account] + FixedPointMathLib.fullMulDiv(balanceOf(account), currentRewardPerShare - userRewardPerSharePaid[token][account], 1e36);
+        return rewards[token][account]
+            + FixedPointMathLib.fullMulDiv(
+                balanceOf(account), currentRewardPerShare - userRewardPerSharePaid[token][account], 1e36
+            );
     }
 
-    // Helper to get all reward tokens
+    /**
+     * @notice Retrieves the list of reward tokens.
+     * @return An array containing the addresses of all reward tokens.
+     * @dev Helper function for frontend and external integrations.
+     */
     function getRewardTokens() external view returns (address[] memory) {
         return rewardTokens;
     }
@@ -391,9 +474,11 @@ contract fatBERA is
                             INTERNAL LOGIC
     ###############################################################*/
     /**
-     * @dev Overrides the ERC20Upgradeable _update function to update rewards for transfers.
-     *      This hook is called on every token balance change. We only update rewards
-     *      for transfer actions (i.e. where both `from` and `to` are non-zero).
+     * @notice Hook to update rewards during token transfers.
+     * @param from The sender address.
+     * @param to The recipient address.
+     * @param value The amount transferred.
+     * @dev Only updates rewards if both addresses are non-zero.
      */
     function _update(address from, address to, uint256 value) internal override {
         // Call reward update if both addresses are non-zero (not mint or burn)
@@ -404,9 +489,11 @@ contract fatBERA is
         // Proceed with the normal token update logic.
         super._update(from, to, value);
     }
-    
+
     /**
-     * @dev Internal helper to update rewards for all reward tokens for a given account.
+     * @notice Updates rewards for all reward tokens for a given account.
+     * @param account The address for which rewards are updated.
+     * @dev Iterates over each reward token and calls _updateRewards for individual tokens.
      */
     function _updateRewards(address account) internal {
         for (uint256 i = 0; i < rewardTokens.length; i++) {
@@ -415,7 +502,10 @@ contract fatBERA is
     }
 
     /**
-     * @dev Internal helper to update rewards for a specific reward token for a given account.
+     * @notice Updates rewards for a specific reward token for an account.
+     * @param account The address for which rewards are updated.
+     * @param token The reward token address.
+     * @dev Updates global reward data before calculating and storing user-specific rewards.
      */
     function _updateRewards(address account, address token) internal {
         _updateReward(token);
@@ -430,7 +520,9 @@ contract fatBERA is
     }
 
     /**
-     * @dev Internal helper to update global reward info for a specific reward token.
+     * @notice Updates the global reward data for a specific token.
+     * @param token The reward token address.
+     * @dev Computes additional reward per share based on elapsed time and updates last update time.
      */
     function _updateReward(address token) internal {
         RewardData storage data = rewardData[token];
@@ -446,7 +538,10 @@ contract fatBERA is
     }
 
     /**
-     * @dev Internal helper to determine the last applicable timestamp for a reward.
+     * @notice Determines the appropriate timestamp for reward calculations.
+     * @param token The reward token address.
+     * @return The last applicable timestamp, either the current block timestamp or the period finish time.
+     * @dev Returns the minimum of the current block timestamp and periodFinish.
      */
     function _lastTimeRewardApplicable(address token) internal view returns (uint256) {
         RewardData storage data = rewardData[token];

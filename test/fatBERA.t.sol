@@ -12,11 +12,11 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 
 contract fatBERATest is Test {
-    uint256 public maxDeposits  = 36000000 ether;
-    address public admin        = makeAddr("admin");
-    address public alice        = makeAddr("alice");
-    address public bob          = makeAddr("bob");
-    address public charlie      = makeAddr("charlie");
+    uint256 public maxDeposits = 36000000 ether;
+    address public admin = makeAddr("admin");
+    address public alice = makeAddr("alice");
+    address public bob = makeAddr("bob");
+    address public charlie = makeAddr("charlie");
 
     fatBERA public vault;
     MockWETH public wbera;
@@ -35,17 +35,14 @@ contract fatBERATest is Test {
 
         // Deploy vault with admin as DEFAULT_ADMIN_ROLE
         bytes memory initData = abi.encodeWithSelector(
-            fatBERA.initialize.selector, 
-            address(wbera), 
-            admin,  // Now initial admin
+            fatBERA.initialize.selector,
+            address(wbera),
+            admin, // Now initial admin
             maxDeposits
         );
 
         // Deploy proxy using the implementation - match deployment script approach
-        address proxy = Upgrades.deployUUPSProxy(
-            "fatBERA.sol:fatBERA",
-            initData
-        );
+        address proxy = Upgrades.deployUUPSProxy("fatBERA.sol:fatBERA", initData);
         vault = fatBERA(payable(proxy));
 
         // Debug logs
@@ -129,7 +126,7 @@ contract fatBERATest is Test {
 
     function test_PreviewRewardsAccuracy() public {
         // Define an acceptable tolerance (in wei) to account for rounding differences.
-         // 10^7 wei tolerance (0.00001 WBERA approximately)
+        // 10^7 wei tolerance (0.00001 WBERA approximately)
 
         // Alice deposits 100 WBERA
         vm.prank(alice);
@@ -167,20 +164,14 @@ contract fatBERATest is Test {
             "Alice's total reward mismatch after second reward"
         );
         assertApproxEqAbs(
-            vault.previewRewards(bob, address(wbera)),
-            expectedBobReward,
-            tolerance,
-            "Bob's reward preview mismatch"
+            vault.previewRewards(bob, address(wbera)), expectedBobReward, tolerance, "Bob's reward preview mismatch"
         );
 
         // After Alice claims her rewards, her preview should return 0 but Bob's should remain unchanged.
         vm.prank(alice);
         vault.claimRewards(address(alice));
         assertApproxEqAbs(
-            vault.previewRewards(alice, address(wbera)),
-            0,
-            tolerance,
-            "Alice should have 0 rewards after claim"
+            vault.previewRewards(alice, address(wbera)), 0, tolerance, "Alice should have 0 rewards after claim"
         );
         assertApproxEqAbs(
             vault.previewRewards(bob, address(wbera)),
@@ -209,10 +200,7 @@ contract fatBERATest is Test {
         notifyAndWarp(address(wbera), 10e18);
         // Check Alice's claimable rewards
         assertApproxEqAbs(
-            vault.previewRewards(alice, address(wbera)),
-            10e18,
-            tolerance,
-            "Alice should have 10e18 rewards"
+            vault.previewRewards(alice, address(wbera)), 10e18, tolerance, "Alice should have 10e18 rewards"
         );
     }
 
@@ -242,10 +230,7 @@ contract fatBERATest is Test {
             "Alice should have first reward + half of second"
         );
         assertApproxEqAbs(
-            vault.previewRewards(bob, address(wbera)),
-            5e18,
-            tolerance,
-            "Bob should have half of second reward only"
+            vault.previewRewards(bob, address(wbera)), 5e18, tolerance, "Bob should have half of second reward only"
         );
     }
 
@@ -268,12 +253,7 @@ contract fatBERATest is Test {
         vault.claimRewards(address(alice));
 
         // Verify reward received
-        assertApproxEqAbs(
-            wbera.balanceOf(alice) - balanceBefore,
-            10e18,
-            tolerance,
-            "Should receive full reward"
-        );
+        assertApproxEqAbs(wbera.balanceOf(alice) - balanceBefore, 10e18, tolerance, "Should receive full reward");
         assertEq(vault.previewRewards(alice, address(wbera)), 0, "Rewards should be zero after claim");
     }
 
@@ -336,10 +316,7 @@ contract fatBERATest is Test {
 
         // Verify rewards
         assertApproxEqAbs(
-            vault.previewRewards(alice, address(wbera)),
-            5e18,
-            tolerance,
-            "Alice should have half of second reward"
+            vault.previewRewards(alice, address(wbera)), 5e18, tolerance, "Alice should have half of second reward"
         );
         assertApproxEqAbs(
             vault.previewRewards(bob, address(wbera)),
@@ -383,10 +360,7 @@ contract fatBERATest is Test {
             "Alice should have share of second and third rewards"
         );
         assertApproxEqAbs(
-            vault.previewRewards(bob, address(wbera)),
-            20e18,
-            tolerance,
-            "Bob should have all unclaimed rewards"
+            vault.previewRewards(bob, address(wbera)), 20e18, tolerance, "Bob should have all unclaimed rewards"
         );
         assertApproxEqAbs(
             vault.previewRewards(charlie, address(wbera)),
@@ -424,22 +398,11 @@ contract fatBERATest is Test {
 
         // Verify complex reward distribution
         assertApproxEqAbs(
-            vault.previewRewards(alice, address(wbera)),
-            10e18,
-            tolerance,
-            "Alice's new rewards after claim"
+            vault.previewRewards(alice, address(wbera)), 10e18, tolerance, "Alice's new rewards after claim"
         );
+        assertApproxEqAbs(vault.previewRewards(bob, address(wbera)), 40e18, tolerance, "Bob's accumulated rewards");
         assertApproxEqAbs(
-            vault.previewRewards(bob, address(wbera)),
-            40e18,
-            tolerance,
-            "Bob's accumulated rewards"
-        );
-        assertApproxEqAbs(
-            vault.previewRewards(charlie, address(wbera)),
-            30e18,
-            tolerance,
-            "Charlie's portion of last reward"
+            vault.previewRewards(charlie, address(wbera)), 30e18, tolerance, "Charlie's portion of last reward"
         );
     }
 
@@ -458,12 +421,7 @@ contract fatBERATest is Test {
 
         // New reward should work
         notifyAndWarp(address(wbera), 10e18);
-        assertApproxEqAbs(
-            vault.previewRewards(alice, address(wbera)),
-            10e18,
-            tolerance,
-            "Should receive new rewards"
-        );
+        assertApproxEqAbs(vault.previewRewards(alice, address(wbera)), 10e18, tolerance, "Should receive new rewards");
     }
 
     function test_OwnerWithdrawAndRewardCycles() public {
@@ -485,24 +443,18 @@ contract fatBERATest is Test {
         notifyAndWarp(address(wbera), 30e18);
 
         // Verify rewards still work correctly
-        assertApproxEqAbs(
-            vault.previewRewards(alice, address(wbera)),
-            15e18,
-            tolerance,
-            "Alice's reward share"
-        );
-        assertApproxEqAbs(
-            vault.previewRewards(bob, address(wbera)),
-            15e18,
-            tolerance,
-            "Bob's reward share"
-        );
+        assertApproxEqAbs(vault.previewRewards(alice, address(wbera)), 15e18, tolerance, "Alice's reward share");
+        assertApproxEqAbs(vault.previewRewards(bob, address(wbera)), 15e18, tolerance, "Bob's reward share");
     }
 
     function test_MaxDeposits() public {
         // Try to deposit more than max
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxDeposit.selector, alice, maxDeposits + 1, maxDeposits));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ERC4626Upgradeable.ERC4626ExceededMaxDeposit.selector, alice, maxDeposits + 1, maxDeposits
+            )
+        );
         vault.deposit(maxDeposits + 1, alice);
 
         // Deposit up to max should work
@@ -518,7 +470,11 @@ contract fatBERATest is Test {
     function test_MaxDepositsWithMint() public {
         // Try to mint more than max
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxMint.selector, alice, maxDeposits + 1, maxDeposits));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ERC4626Upgradeable.ERC4626ExceededMaxMint.selector, alice, maxDeposits + 1, maxDeposits
+            )
+        );
         vault.mint(maxDeposits + 1, alice);
 
         // Mint up to max should work
@@ -544,7 +500,9 @@ contract fatBERATest is Test {
 
         // Third user tries to deposit more than remaining
         vm.prank(charlie);
-        vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxDeposit.selector, charlie, 2 ether, 1 ether));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxDeposit.selector, charlie, 2 ether, 1 ether)
+        );
         vault.deposit(2 ether, charlie);
 
         // But can deposit exactly the remaining amount
@@ -556,7 +514,7 @@ contract fatBERATest is Test {
         // Initial deposit at current max
         vm.prank(alice);
         vault.deposit(maxDeposits, alice);
-          // New deposit should still fail since vault is already at initial max
+        // New deposit should still fail since vault is already at initial max
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxDeposit.selector, bob, 1 ether, 0));
         vault.deposit(1 ether, bob);
@@ -592,7 +550,7 @@ contract fatBERATest is Test {
 
         // Get reward tokens list
         address[] memory rewardTokens = vault.getRewardTokens();
-        
+
         // Verify list contents
         assertEq(rewardTokens.length, 2, "Should have 2 reward tokens");
         assertEq(rewardTokens[0], address(rewardToken1), "First reward token mismatch");
@@ -603,7 +561,7 @@ contract fatBERATest is Test {
     function testFuzz_Deposit(uint256 amount) public {
         // Bound amount between 1 and maxDeposits to avoid unrealistic values
         amount = bound(amount, 1, maxDeposits);
-        
+
         vm.prank(alice);
         uint256 sharesMinted = vault.deposit(amount, alice);
 
@@ -666,16 +624,14 @@ contract fatBERATest is Test {
         assertApproxEqRel(
             rewardsReceived,
             rewardAmount,
-            1e11, // 
+            1e11, //
             "Reward amount received should be approximately equal"
         );
     }
 
-    function testFuzz_MultiUserRewardDistribution(
-        uint256 aliceDeposit,
-        uint256 bobDeposit,
-        uint256 rewardAmount
-    ) public {
+    function testFuzz_MultiUserRewardDistribution(uint256 aliceDeposit, uint256 bobDeposit, uint256 rewardAmount)
+        public
+    {
         // Bound deposits to avoid overflow and unrealistic values
         aliceDeposit = bound(aliceDeposit, 1 ether / 10000, maxDeposits / 2);
         bobDeposit = bound(bobDeposit, 1 ether / 10000, maxDeposits - aliceDeposit);
@@ -712,18 +668,12 @@ contract fatBERATest is Test {
 
         // Verify rewards with 0.00001% relative tolerance
         assertApproxEqRel(
-            aliceRewardsReceived,
-            expectedAliceReward,
-            1e11,
-            "Alice rewards should be approximately equal to expected"
+            aliceRewardsReceived, expectedAliceReward, 1e11, "Alice rewards should be approximately equal to expected"
         );
         assertApproxEqRel(
-            bobRewardsReceived,
-            expectedBobReward,
-            1e11,
-            "Bob rewards should be approximately equal to expected"
+            bobRewardsReceived, expectedBobReward, 1e11, "Bob rewards should be approximately equal to expected"
         );
-        
+
         // Critical safety check - protocol should never over-distribute
         assertLe(
             aliceRewardsReceived + bobRewardsReceived,
@@ -747,28 +697,16 @@ contract fatBERATest is Test {
 
         // Verify reward preview for both tokens
         assertApproxEqAbs(
-            vault.previewRewards(alice, address(rewardToken1)),
-            10e18,
-            tolerance,
-            "Alice's RWD1 rewards incorrect"
+            vault.previewRewards(alice, address(rewardToken1)), 10e18, tolerance, "Alice's RWD1 rewards incorrect"
         );
         assertApproxEqAbs(
-            vault.previewRewards(alice, address(rewardToken2)),
-            20e18,
-            tolerance,
-            "Alice's RWD2 rewards incorrect"
+            vault.previewRewards(alice, address(rewardToken2)), 20e18, tolerance, "Alice's RWD2 rewards incorrect"
         );
         assertApproxEqAbs(
-            vault.previewRewards(bob, address(rewardToken1)),
-            10e18,
-            tolerance,
-            "Bob's RWD1 rewards incorrect"
+            vault.previewRewards(bob, address(rewardToken1)), 10e18, tolerance, "Bob's RWD1 rewards incorrect"
         );
         assertApproxEqAbs(
-            vault.previewRewards(bob, address(rewardToken2)),
-            20e18,
-            tolerance,
-            "Bob's RWD2 rewards incorrect"
+            vault.previewRewards(bob, address(rewardToken2)), 20e18, tolerance, "Bob's RWD2 rewards incorrect"
         );
 
         // Claim rewards and verify balances
@@ -779,16 +717,10 @@ contract fatBERATest is Test {
         vault.claimRewards(address(alice));
 
         assertApproxEqAbs(
-            rewardToken1.balanceOf(alice) - aliceRwd1Before,
-            10e18,
-            tolerance,
-            "Alice's RWD1 claim incorrect"
+            rewardToken1.balanceOf(alice) - aliceRwd1Before, 10e18, tolerance, "Alice's RWD1 claim incorrect"
         );
         assertApproxEqAbs(
-            rewardToken2.balanceOf(alice) - aliceRwd2Before,
-            20e18,
-            tolerance,
-            "Alice's RWD2 claim incorrect"
+            rewardToken2.balanceOf(alice) - aliceRwd2Before, 20e18, tolerance, "Alice's RWD2 claim incorrect"
         );
     }
 
@@ -819,22 +751,13 @@ contract fatBERATest is Test {
             "Alice's RWD1 rewards after partial claim"
         );
         assertApproxEqAbs(
-            vault.previewRewards(alice, address(rewardToken2)),
-            50e18,
-            tolerance,
-            "Alice's RWD2 rewards accumulated"
+            vault.previewRewards(alice, address(rewardToken2)), 50e18, tolerance, "Alice's RWD2 rewards accumulated"
         );
         assertApproxEqAbs(
-            vault.previewRewards(bob, address(rewardToken1)),
-            25e18,
-            tolerance,
-            "Bob's RWD1 total rewards"
+            vault.previewRewards(bob, address(rewardToken1)), 25e18, tolerance, "Bob's RWD1 total rewards"
         );
         assertApproxEqAbs(
-            vault.previewRewards(bob, address(rewardToken2)),
-            50e18,
-            tolerance,
-            "Bob's RWD2 total rewards"
+            vault.previewRewards(bob, address(rewardToken2)), 50e18, tolerance, "Bob's RWD2 total rewards"
         );
     }
 
@@ -881,28 +804,16 @@ contract fatBERATest is Test {
 
         // Verify rewards with 0.00001% relative tolerance
         assertApproxEqRel(
-            rewardToken1.balanceOf(alice) - aliceReward1Before,
-            expectedAliceReward1,
-            1e11,
-            "Alice reward1 mismatch"
+            rewardToken1.balanceOf(alice) - aliceReward1Before, expectedAliceReward1, 1e11, "Alice reward1 mismatch"
         );
         assertApproxEqRel(
-            rewardToken2.balanceOf(alice) - aliceReward2Before,
-            expectedAliceReward2,
-            1e11,
-            "Alice reward2 mismatch"
+            rewardToken2.balanceOf(alice) - aliceReward2Before, expectedAliceReward2, 1e11, "Alice reward2 mismatch"
         );
         assertApproxEqRel(
-            rewardToken1.balanceOf(bob) - bobReward1Before,
-            expectedBobReward1,
-            1e11,
-            "Bob reward1 mismatch"
+            rewardToken1.balanceOf(bob) - bobReward1Before, expectedBobReward1, 1e11, "Bob reward1 mismatch"
         );
         assertApproxEqRel(
-            rewardToken2.balanceOf(bob) - bobReward2Before,
-            expectedBobReward2,
-            1e11,
-            "Bob reward2 mismatch"
+            rewardToken2.balanceOf(bob) - bobReward2Before, expectedBobReward2, 1e11, "Bob reward2 mismatch"
         );
 
         // Verify total rewards don't exceed input amounts
@@ -937,12 +848,12 @@ contract fatBERATest is Test {
 
     function test_DepositNativeExceedsMax() public {
         uint256 maxDeposit = maxDeposits - 1 ether;
-        
+
         // Fill up to max
         vm.prank(alice);
         vault.deposit(maxDeposit, alice);
 
-        // Try to deposit 1.01 ETH native 
+        // Try to deposit 1.01 ETH native
         vm.prank(bob);
         vm.expectRevert(fatBERA.ExceedsMaxDeposits.selector);
         vault.depositNative{value: 1.01 ether}(bob);
@@ -974,21 +885,13 @@ contract fatBERATest is Test {
         vm.prank(alice);
         vault.deposit(erc20Deposit, alice);
 
-        assertEq(
-            vault.depositPrincipal(),
-            nativeDeposit + erc20Deposit,
-            "Should track both deposit types"
-        );
-        assertEq(
-            vault.balanceOf(alice),
-            nativeDeposit + erc20Deposit,
-            "Shares should be cumulative"
-        );
+        assertEq(vault.depositPrincipal(), nativeDeposit + erc20Deposit, "Should track both deposit types");
+        assertEq(vault.balanceOf(alice), nativeDeposit + erc20Deposit, "Shares should be cumulative");
     }
 
     function test_NativeDepositWithRewards() public {
         uint256 depositAmount = 10 ether;
-        
+
         vm.prank(alice);
         vault.depositNative{value: depositAmount}(alice);
 
@@ -997,10 +900,7 @@ contract fatBERATest is Test {
 
         // Verify rewards
         assertApproxEqAbs(
-            vault.previewRewards(alice, address(wbera)),
-            10 ether,
-            tolerance,
-            "Should accrue rewards correctly"
+            vault.previewRewards(alice, address(wbera)), 10 ether, tolerance, "Should accrue rewards correctly"
         );
     }
 
@@ -1016,10 +916,7 @@ contract fatBERATest is Test {
         assertEq(vault.depositPrincipal(), amount, "Principal should match");
     }
 
-    function testFuzz_MixedDepositTypes(
-        uint256 nativeAmount,
-        uint256 erc20Amount
-    ) public {
+    function testFuzz_MixedDepositTypes(uint256 nativeAmount, uint256 erc20Amount) public {
         nativeAmount = bound(nativeAmount, 1 wei, maxDeposits / 2);
         erc20Amount = bound(erc20Amount, 1 wei, maxDeposits - nativeAmount);
         vm.deal(alice, nativeAmount);
@@ -1032,11 +929,7 @@ contract fatBERATest is Test {
         vm.prank(alice);
         vault.deposit(erc20Amount, alice);
 
-        assertEq(
-            vault.depositPrincipal(),
-            nativeAmount + erc20Amount,
-            "Total principal should sum both types"
-        );
+        assertEq(vault.depositPrincipal(), nativeAmount + erc20Amount, "Total principal should sum both types");
     }
 
     function test_RoleManagement() public {
@@ -1099,7 +992,7 @@ contract fatBERATest is Test {
         // Immediately after notification, no reward should have accrued.
         uint256 initialAccrued = vault.previewRewards(alice, address(wbera));
         assertEq(initialAccrued, 0, "No reward should accrue immediately after notification");
-        
+
         // Warp forward by half of the reward duration (i.e. 3.5 days).
         uint256 halfTime = 7 days / 2;
         vm.warp(startTime + halfTime);
@@ -1135,7 +1028,9 @@ contract fatBERATest is Test {
         // Warp further in time; rewards should not exceed the full reward.
         vm.warp(startTime + 7 days + 1 days);
         uint256 accruedRewardAfterExtra = vault.previewRewards(alice, address(wbera));
-        assertApproxEqAbs(accruedRewardAfterExtra, rewardAmount, tolerance, "Reward should not accrue past reward period");
+        assertApproxEqAbs(
+            accruedRewardAfterExtra, rewardAmount, tolerance, "Reward should not accrue past reward period"
+        );
     }
 
     /**
@@ -1154,12 +1049,12 @@ contract fatBERATest is Test {
 
         // Record the initial timestamp.
         uint256 startTime = block.timestamp;
-        
+
         // First reward: 40 WBERA distributed over 7 days.
         uint256 rewardAmount1 = 40e18;
         vm.prank(admin);
         vault.notifyRewardAmount(address(wbera), rewardAmount1);
-        
+
         // Warp to the end of the first reward period.
         vm.warp(startTime + 7 days);
         uint256 accruedFirst = vault.previewRewards(alice, address(wbera));
@@ -1240,34 +1135,34 @@ contract fatBERATest is Test {
         uint256 depositAmount = 100e18;
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
-        
+
         // Notify a reward of 10 WBERA
         uint256 rewardAmount = 10e18;
         vm.prank(admin);
         vault.notifyRewardAmount(address(wbera), rewardAmount);
-        
+
         // Warp forward by half the reward duration (3.5 days)
         uint256 halfPeriod = 7 days / 2;
         vm.warp(block.timestamp + halfPeriod);
-        
+
         // Capture Alice's accrued rewards before the transfer
         uint256 aliceRewardsBefore = vault.previewRewards(alice, address(wbera));
         assertGt(aliceRewardsBefore, 0, "Alice should have accrued rewards before transfer");
-        
+
         // Alice transfers half of her shares (50e18) to Bob
         uint256 transferAmount = depositAmount / 2;
         vm.prank(alice);
         vault.transfer(bob, transferAmount);
-        
+
         // Immediately after transfer:
         // 1. Alice's rewards should remain the same (she keeps rewards accrued before transfer)
         uint256 aliceRewardsAfter = vault.previewRewards(alice, address(wbera));
         assertEq(aliceRewardsAfter, aliceRewardsBefore, "Alice's rewards should not change after transfer");
-        
+
         // 2. Bob should start with 0 rewards (should not inherit Alice's rewards)
         uint256 bobRewardsAfter = vault.previewRewards(bob, address(wbera));
         assertEq(bobRewardsAfter, 0, "Bob should not have any accrued rewards from transferred shares");
-        
+
         // 3. If Bob claims rewards immediately, he should get nothing
         uint256 bobBalanceBefore = wbera.balanceOf(bob);
         vm.prank(bob);

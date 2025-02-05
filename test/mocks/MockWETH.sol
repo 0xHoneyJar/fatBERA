@@ -24,4 +24,4 @@ contract MockWETH is MockERC20 {
         payable(msg.sender).transfer(wad);
         emit Withdrawal(msg.sender, wad);
     }
-} 
+}
