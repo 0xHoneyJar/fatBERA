@@ -49,6 +49,7 @@ contract fatBERA is
         uint256 periodFinish;
         uint256 rewardRate;
         uint256 lastUpdateTime;
+        uint256 remainingRewards;
     }
 
     /*###############################################################
@@ -119,6 +120,12 @@ contract fatBERA is
         MAX_REWARDS_TOKENS = newMax;
     }
 
+    function withdrawRemainingRewards(address token, address receiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 amount = rewardData[token].remainingRewards;
+        rewardData[token].remainingRewards = 0;
+        IERC20(token).safeTransfer(receiver, amount);
+    }
+
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /**
@@ -173,10 +180,12 @@ contract fatBERA is
 
         if (block.timestamp >= data.periodFinish) {
             data.rewardRate = rewardAmount / data.rewardsDuration;
+            data.remainingRewards += rewardAmount - data.rewardRate * data.rewardsDuration;
         } else {
             uint256 remaining = data.periodFinish - block.timestamp;
             uint256 leftover = remaining * data.rewardRate;
             data.rewardRate = (rewardAmount + leftover) / data.rewardsDuration;
+            data.remainingRewards += (rewardAmount + leftover) - data.rewardRate * data.rewardsDuration;
         }
 
         data.lastUpdateTime = block.timestamp;
