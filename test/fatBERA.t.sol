@@ -10,6 +10,7 @@ import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract fatBERATest is Test {
     uint256 public maxDeposits = 36000000 ether;
@@ -965,6 +966,59 @@ contract fatBERATest is Test {
         vm.stopPrank();
     }
 
+    function test_only_admin_can_pause_and_unpause() public {
+        // Non-admin attempts
+        vm.prank(alice);
+        vm.expectRevert();
+        vault.pause();
+
+        vm.prank(alice);
+        vm.expectRevert();
+        vault.unpause();
+
+        // Admin attempts should succeed
+        vm.startPrank(admin);
+        vault.unpause();
+        assertTrue(!vault.paused(), "Vault should be unpaused");
+        
+        vault.pause();
+        assertTrue(vault.paused(), "Vault should be paused");
+        vm.stopPrank();
+    }
+
+    function test_only_admin_can_set_max_rewards_tokens() public {
+        uint256 newMax = 20;
+        
+        // Non-admin attempt
+        vm.prank(alice);
+        vm.expectRevert();
+        vault.setMaxRewardsTokens(newMax);
+
+        // Admin attempt should succeed
+        vm.prank(admin);
+        vault.setMaxRewardsTokens(newMax);
+        assertEq(vault.MAX_REWARDS_TOKENS(), newMax, "MAX_REWARDS_TOKENS not updated");
+    }
+
+    function test_setRewardsDuration_active_period_reverts() public {
+        // First make a deposit to avoid ZeroShares error
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+
+        // Set initial duration
+        vm.prank(admin);
+        vault.setRewardsDuration(address(wbera), 7 days);
+
+        // Notify reward to start period
+        vm.prank(admin);
+        vault.notifyRewardAmount(address(wbera), 10e18);
+
+        // Attempt to update duration during active period
+        vm.prank(admin);
+        vm.expectRevert("Reward period still active");
+        vault.setRewardsDuration(address(wbera), 14 days);
+    }
+
     // Add the following test functions at the bottom of the fatBERATest contract.
 
     /**
@@ -1081,7 +1135,7 @@ contract fatBERATest is Test {
     /**
      * @dev Test that a sandwich attack is mitigated. In a vulnerable design, an attacker depositing
      * just before notifyRewardAmount() and quickly claiming would capture the full reward.
-     * With time‐based accrual, the attacker only earns rewards for the very short time they are staked.
+     * With time-based accrual, the attacker only earns rewards for the very short time they are staked.
      * Withdrawals are disabled, so previewRewards() is used to verify the minimal reward accumulation.
      */
     function test_SandwichAttackMitigation() public {
@@ -1174,5 +1228,99 @@ contract fatBERATest is Test {
         vm.warp(block.timestamp + 1 days);
         uint256 bobRewardsLater = vault.previewRewards(bob, address(wbera));
         assertGt(bobRewardsLater, 0, "Bob should accrue new rewards after time passes");
+    }
+
+    function test_setWhitelistedVault_access() public {
+        address vaultAddress = makeAddr("vault");
+        
+        // Non-admin attempt
+        vm.prank(alice);
+        vm.expectRevert();
+        vault.setWhitelistedVault(vaultAddress, true);
+
+        // Admin attempt should succeed
+        vm.prank(admin);
+        vault.setWhitelistedVault(vaultAddress, true);
+        assertTrue(vault.isWhitelistedVault(vaultAddress), "Vault should be whitelisted");
+
+        // Admin can also unset
+        vm.prank(admin);
+        vault.setWhitelistedVault(vaultAddress, false);
+        assertFalse(vault.isWhitelistedVault(vaultAddress), "Vault should not be whitelisted");
+    }
+
+    function test_transfer_to_whitelisted_vault_updates_vaultedShares() public {
+        address vaultAddress = makeAddr("vault");
+        uint256 depositAmount = 100e18;
+        uint256 transferAmount = 50e18;
+
+        // Setup: Alice deposits and vault is whitelisted
+        vm.prank(alice);
+        vault.deposit(depositAmount, alice);
+        
+        vm.prank(admin);
+        vault.setWhitelistedVault(vaultAddress, true);
+
+        // Transfer to vault
+        vm.prank(alice);
+        vault.transfer(vaultAddress, transferAmount);
+
+        // Check vaulted shares
+        assertEq(vault.vaultedShares(alice), transferAmount, "Vaulted shares not updated correctly");
+        assertEq(
+            vault.effectiveBalance(alice),
+            depositAmount,
+            "Effective balance should remain unchanged"
+        );
+    }
+
+    function test_transfer_from_whitelisted_vault_fails_if_insufficient() public {
+        address vaultAddress = makeAddr("vault");
+        uint256 depositAmount = 100e18;
+        uint256 transferAmount = 50e18;
+
+        // Setup: Alice deposits and transfers to vault
+        vm.prank(alice);
+        vault.deposit(depositAmount, alice);
+        
+        vm.prank(admin);
+        vault.setWhitelistedVault(vaultAddress, true);
+
+        vm.prank(alice);
+        vault.transfer(vaultAddress, transferAmount);
+
+        // Attempt to transfer more than vaulted shares from vault
+        vm.prank(vaultAddress);
+        vm.expectRevert("Insufficient vaulted shares");
+        vault.transfer(bob, transferAmount + 1e18);
+    }
+
+    function test_deposit_principal_consistency() public {
+        // Track total deposits
+        uint256 totalDeposited;
+
+        // Native deposit
+        uint256 nativeAmount = 1 ether;
+        vm.deal(alice, nativeAmount);
+        vm.prank(alice);
+        vault.depositNative{value: nativeAmount}(alice);
+        totalDeposited += nativeAmount;
+
+        // Regular deposit
+        uint256 regularAmount = 2 ether;
+        vm.prank(bob);
+        vault.deposit(regularAmount, bob);
+        totalDeposited += regularAmount;
+
+        // Mint shares
+        uint256 mintShares = 3 ether;
+        vm.prank(charlie);
+        uint256 assetsForMint = vault.mint(mintShares, charlie);
+        totalDeposited += assetsForMint;
+
+        // Verify consistency
+        assertEq(vault.depositPrincipal(), totalDeposited, "depositPrincipal mismatch");
+        assertEq(vault.totalSupply(), totalDeposited, "totalSupply mismatch");
+        assertEq(vault.totalAssets(), totalDeposited, "totalAssets mismatch");
     }
 }
