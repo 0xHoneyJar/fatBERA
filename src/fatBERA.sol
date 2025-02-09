@@ -44,6 +44,7 @@ contract fatBERA is
     error RewardsDurationNotSet();
     error RewardPeriodStillActive();
     error ZeroRewardDuration();
+    error CannotDepositToVault();
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STRUCTS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -329,6 +330,7 @@ contract fatBERA is
     function depositNative(address receiver) external payable nonReentrant returns (uint256) {
         if (msg.value == 0) revert ZeroPrincipal();
         if (msg.value > maxDeposit(receiver)) revert ExceedsMaxDeposits();
+        if (isWhitelistedVault[receiver]) revert CannotDepositToVault();
         _updateRewards(receiver);
 
         // Wrap native token
@@ -356,6 +358,7 @@ contract fatBERA is
      * @dev Overrides the parent deposit function and increments depositPrincipal.
      */
     function deposit(uint256 assets, address receiver) public virtual override returns (uint256) {
+        if (isWhitelistedVault[receiver]) revert CannotDepositToVault();
         _updateRewards(receiver);
 
         uint256 sharesMinted = super.deposit(assets, receiver);
@@ -372,6 +375,7 @@ contract fatBERA is
      * @dev Overrides the parent mint function and increments depositPrincipal.
      */
     function mint(uint256 shares, address receiver) public virtual override returns (uint256) {
+        if (isWhitelistedVault[receiver]) revert CannotDepositToVault();
         _updateRewards(receiver);
 
         uint256 assetsRequired = super.previewMint(shares);
