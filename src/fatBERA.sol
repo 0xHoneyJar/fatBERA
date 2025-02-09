@@ -554,7 +554,7 @@ contract fatBERA is
      */
     function _updateReward(address token) internal {
         RewardData storage data = rewardData[token];
-        uint256 lastApplicable = _lastTimeRewardApplicable(token);
+        uint256 lastApplicable = block.timestamp < data.periodFinish ? block.timestamp : data.periodFinish;
         if (totalSupply() > 0) {
             uint256 elapsed = lastApplicable - data.lastUpdateTime;
             if (elapsed > 0) {
@@ -563,16 +563,5 @@ contract fatBERA is
             }
         }
         data.lastUpdateTime = lastApplicable;
-    }
-
-    /**
-     * @notice Determines the appropriate timestamp for reward calculations.
-     * @param token The reward token address.
-     * @return The last applicable timestamp, either the current block timestamp or the period finish time.
-     * @dev Returns the minimum of the current block timestamp and periodFinish.
-     */
-    function _lastTimeRewardApplicable(address token) internal view returns (uint256) {
-        RewardData storage data = rewardData[token];
-        return block.timestamp < data.periodFinish ? block.timestamp : data.periodFinish;
     }
 }
