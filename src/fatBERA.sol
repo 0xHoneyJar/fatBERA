@@ -263,6 +263,9 @@ contract fatBERA is
      * should not accrue rewards.
      */
     function setWhitelistedVault(address vaultAddress, bool status) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (!isWhitelistedVault[vaultAddress]){
+            _updateRewards(vaultAddress);
+        }
         isWhitelistedVault[vaultAddress] = status;
     }
 

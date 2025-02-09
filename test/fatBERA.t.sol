@@ -1019,8 +1019,6 @@ contract fatBERATest is Test {
         vault.setRewardsDuration(address(wbera), 14 days);
     }
 
-    // Add the following test functions at the bottom of the fatBERATest contract.
-
     /**
      * @dev Test that rewards accrue linearly over time.
      * After notifying a reward, we warp forward a fraction of the reward period and verify
