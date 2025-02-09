@@ -81,6 +81,7 @@ contract fatBERA is
     uint256 public MAX_REWARDS_TOKENS;
 
     bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     mapping(address => uint256) public vaultedShares;
     mapping(address => bool) public isWhitelistedVault;
@@ -119,6 +120,7 @@ contract fatBERA is
         // Set up roles
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _grantRole(REWARD_NOTIFIER_ROLE, _owner);
+        _grantRole(PAUSER_ROLE, _owner);
 
         MAX_REWARDS_TOKENS = 10;
 
@@ -132,15 +134,15 @@ contract fatBERA is
 
     /**
      * @notice Pauses contract operations.
-     * @dev Only callable by admin.
+     * @dev Can be called by accounts with PAUSER_ROLE for quick emergency response.
      */
-    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
     /**
      * @notice Unpauses contract operations.
-     * @dev Only callable by admin.
+     * @dev Only callable by admin after thorough review of the emergency situation.
      */
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
