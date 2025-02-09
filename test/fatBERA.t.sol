@@ -980,7 +980,7 @@ contract fatBERATest is Test {
         vm.startPrank(admin);
         vault.unpause();
         assertTrue(!vault.paused(), "Vault should be unpaused");
-        
+
         vault.pause();
         assertTrue(vault.paused(), "Vault should be paused");
         vm.stopPrank();
@@ -988,7 +988,7 @@ contract fatBERATest is Test {
 
     function test_only_admin_can_set_max_rewards_tokens() public {
         uint256 newMax = 20;
-        
+
         // Non-admin attempt
         vm.prank(alice);
         vm.expectRevert();
@@ -1232,7 +1232,7 @@ contract fatBERATest is Test {
 
     function test_setWhitelistedVault_access() public {
         address vaultAddress = makeAddr("vault");
-        
+
         // Non-admin attempt
         vm.prank(alice);
         vm.expectRevert();
@@ -1257,7 +1257,7 @@ contract fatBERATest is Test {
         // Setup: Alice deposits and vault is whitelisted
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
-        
+
         vm.prank(admin);
         vault.setWhitelistedVault(vaultAddress, true);
 
@@ -1267,11 +1267,7 @@ contract fatBERATest is Test {
 
         // Check vaulted shares
         assertEq(vault.vaultedShares(alice), transferAmount, "Vaulted shares not updated correctly");
-        assertEq(
-            vault.effectiveBalance(alice),
-            depositAmount,
-            "Effective balance should remain unchanged"
-        );
+        assertEq(vault.effectiveBalance(alice), depositAmount, "Effective balance should remain unchanged");
     }
 
     function test_transfer_from_whitelisted_vault_fails_if_insufficient() public {
@@ -1282,7 +1278,7 @@ contract fatBERATest is Test {
         // Setup: Alice deposits and transfers to vault
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
-        
+
         vm.prank(admin);
         vault.setWhitelistedVault(vaultAddress, true);
 

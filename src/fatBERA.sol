@@ -78,7 +78,7 @@ contract fatBERA is
     uint256 public MAX_REWARDS_TOKENS;
 
     bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
-    
+
     mapping(address => uint256) public vaultedShares;
     mapping(address => bool) public isWhitelistedVault;
 
@@ -151,7 +151,7 @@ contract fatBERA is
     function setMaxRewardsTokens(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         MAX_REWARDS_TOKENS = newMax;
     }
-    
+
     /**
      * @notice Withdraws the accumulated rounding losses for a specific reward token.
      * @param token The address of the reward token.
@@ -254,7 +254,7 @@ contract fatBERA is
         emit RewardsDurationUpdated(token, duration);
     }
 
-     /**
+    /**
      * @dev Admin function to set a whitelisted vault address.
      * Vaults are considered external contracts that hold fatBERA and
      * should not accrue rewards.
@@ -474,11 +474,10 @@ contract fatBERA is
             uint256 additional = FixedPointMathLib.fullMulDiv(elapsed * data.rewardRate, 1e36, supply);
             currentRewardPerShare += additional;
         }
-        return rewards[token][account] + FixedPointMathLib.fullMulDiv(
-            effectiveBalance(account),
-            currentRewardPerShare - userRewardPerSharePaid[token][account],
-            1e36
-        );
+        return rewards[token][account]
+            + FixedPointMathLib.fullMulDiv(
+                effectiveBalance(account), currentRewardPerShare - userRewardPerSharePaid[token][account], 1e36
+            );
     }
 
     /**
