@@ -462,6 +462,27 @@ contract fatBERA is
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          VIEW LOGIC                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+    
+    /**
+     * @notice Simulates the effects of withdrawing assets at the current block.
+     * @return Returns 0 if paused, otherwise returns the standard ERC4626 preview calculation.
+     * @dev Overridden to maintain consistency with maxWithdraw when paused.
+     */
+    function previewWithdraw(uint256 assets) public view virtual override returns (uint256) {
+        if (paused()) return 0;
+        return super.previewWithdraw(assets);
+    }
+
+    /**
+     * @notice Simulates the effects of redeeming shares at the current block.
+     * @return Returns 0 if paused, otherwise returns the standard ERC4626 preview calculation.
+     * @dev Overridden to maintain consistency with maxRedeem when paused.
+     */
+    function previewRedeem(uint256 shares) public view virtual override returns (uint256) {
+        if (paused()) return 0;
+        return super.previewRedeem(shares);
+    }
+
     /**
      * @dev Returns the effective balance of an account for reward calculations.
      * For a regular (non-vault) user, effective balance = wallet balance + vaultedShares.
