@@ -207,7 +207,7 @@ contract fatBERA is
      */
     function notifyRewardAmount(address token, uint256 rewardAmount) external onlyRole(REWARD_NOTIFIER_ROLE) {
         if (rewardAmount == 0) revert ZeroRewards();
-        if (token == address(0)) revert InvalidToken();
+        if (token == address(0) || token == address(this)) revert InvalidToken();
 
         uint256 totalSharesCurrent = totalSupply();
         if (totalSharesCurrent == 0) revert ZeroShares();
