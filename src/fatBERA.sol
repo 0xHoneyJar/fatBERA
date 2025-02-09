@@ -36,7 +36,6 @@ contract fatBERA is
     error ExceedsPrincipal();
     error ZeroRewards();
     error ExceedsMaxDeposits();
-    error InvalidMaxDeposits();
     error ExceedsAvailableRewards();
     error InvalidToken();
     error ZeroShares();
@@ -178,11 +177,10 @@ contract fatBERA is
     /**
      * @notice Updates the maximum deposit limit.
      * @param newMax The new maximum deposit limit.
-     * @dev Reverts if newMax is less than the current deposit principal.
+     * @dev If newMax is less than depositPrincipal, maxDeposits is set to depositPrincipal to halt deposits.
      */
     function setMaxDeposits(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newMax < depositPrincipal) revert InvalidMaxDeposits();
-        maxDeposits = newMax;
+        maxDeposits = newMax < depositPrincipal ? depositPrincipal : newMax;
     }
 
     /**
