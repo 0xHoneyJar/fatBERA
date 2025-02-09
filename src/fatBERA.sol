@@ -188,7 +188,7 @@ contract fatBERA is
      * @dev Reverts if assets is zero or exceeds the deposit principal.
      */
     function withdrawPrincipal(uint256 assets, address receiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (assets <= 0) revert ZeroPrincipal();
+        if (assets == 0) revert ZeroPrincipal();
         if (assets > depositPrincipal) revert ExceedsPrincipal();
 
         depositPrincipal -= assets;
@@ -202,7 +202,7 @@ contract fatBERA is
      * @dev Updates reward rate and accumulates any rounding losses, ensuring exact division when reward period has ended.
      */
     function notifyRewardAmount(address token, uint256 rewardAmount) external onlyRole(REWARD_NOTIFIER_ROLE) {
-        if (rewardAmount <= 0) revert ZeroRewards();
+        if (rewardAmount == 0) revert ZeroRewards();
         if (token == address(0)) revert InvalidToken();
 
         uint256 totalSharesCurrent = totalSupply();
