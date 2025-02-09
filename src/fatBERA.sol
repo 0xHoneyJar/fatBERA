@@ -390,7 +390,6 @@ contract fatBERA is
      * @param receiver The address receiving the claimed rewards.
      * @dev Updates rewards prior to claiming and resets the user's reward balance.
      */
-
     function claimRewards(address token, address receiver) public nonReentrant {
         _updateRewards(msg.sender, token);
 
@@ -404,17 +403,11 @@ contract fatBERA is
     /**
      * @notice Claims accrued rewards for all reward tokens.
      * @param receiver The address receiving the claimed rewards.
-     * @dev Iterates through all reward tokens, updates rewards, and transfers available rewards.
+     * @dev Iterates through all reward tokens and claims each one.
      */
-    function claimRewards(address receiver) public nonReentrant {
+    function claimRewards(address receiver) public {
         for (uint256 i = 0; i < rewardTokens.length; i++) {
-            _updateRewards(msg.sender, rewardTokens[i]);
-
-            uint256 reward = rewards[rewardTokens[i]][msg.sender];
-            if (reward > 0) {
-                rewards[rewardTokens[i]][msg.sender] = 0;
-                IERC20(rewardTokens[i]).safeTransfer(receiver, reward);
-            }
+            claimRewards(rewardTokens[i], receiver);
         }
     }
 
