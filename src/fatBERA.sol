@@ -41,6 +41,9 @@ contract fatBERA is
     error InvalidToken();
     error ZeroShares();
     error ExceedsMaxRewardsTokens();
+    error RewardsDurationNotSet();
+    error RewardPeriodStillActive();
+    error ZeroRewardDuration();
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STRUCTS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -220,7 +223,7 @@ contract fatBERA is
 
         RewardData storage data = rewardData[token];
         // Ensure rewards duration is set
-        require(data.rewardsDuration > 0, "Rewards duration not set");
+        if (data.rewardsDuration == 0) revert RewardsDurationNotSet();
 
         _updateReward(token);
 
@@ -248,8 +251,8 @@ contract fatBERA is
      */
     function setRewardsDuration(address token, uint256 duration) external onlyRole(DEFAULT_ADMIN_ROLE) {
         RewardData storage data = rewardData[token];
-        require(block.timestamp > data.periodFinish, "Reward period still active");
-        require(duration > 0, "Reward duration must be non-zero");
+        if (block.timestamp <= data.periodFinish) revert RewardPeriodStillActive();
+        if (duration == 0) revert ZeroRewardDuration();
         data.rewardsDuration = duration;
         emit RewardsDurationUpdated(token, duration);
     }

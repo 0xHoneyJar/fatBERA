@@ -1015,7 +1015,7 @@ contract fatBERATest is Test {
 
         // Attempt to update duration during active period
         vm.prank(admin);
-        vm.expectRevert("Reward period still active");
+        vm.expectRevert(fatBERA.RewardPeriodStillActive.selector);
         vault.setRewardsDuration(address(wbera), 14 days);
     }
 
