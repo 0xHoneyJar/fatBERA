@@ -9,7 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract DeployFatBERA is Script {
     // Configuration
-    uint256 constant maxDeposits = 10000000 ether;
+    uint256 constant maxDeposits = 9_300_000 ether;
     address constant WBERA = 0x6969696969696969696969696969696969696969;
 
     function run() external {
@@ -22,11 +22,11 @@ contract DeployFatBERA is Script {
 
         address proxy = Upgrades.deployUUPSProxy("fatBERA.sol:fatBERA", initData);
 
-        fatBERA(proxy).setRewardsDuration(WBERA, 7 days);
+        fatBERA(proxy).setRewardsDuration(WBERA, 2 days);
 
-        // Approve and deposit 1 WBERA
-        IERC20(WBERA).approve(proxy, 1 ether);
-        fatBERA(proxy).deposit(1 ether, deployer);
+        // // Approve and deposit 1 WBERA
+        // IERC20(WBERA).approve(proxy, 1 ether);
+        // fatBERA(proxy).deposit(1 ether, deployer);
 
         vm.stopBroadcast();
 
