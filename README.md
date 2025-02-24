@@ -1,7 +1,28 @@
-# LST (Liquid Staking Token)
+# fatBERA
 
 ## Overview
-LST is a liquid staking solution for Berachain, allowing users to stake their BERA while maintaining liquidity through the fatBERA token.
+fatBERA is a liquid staking token (LST) designed for users looking to stake their BERA with THJ validators on Berachain. By staking BERA through fatBERA, users receive:
+
+- Immediate liquidity through the fatBERA token
+- Staking rewards in WBERA that are instantly claimable
+- Future rewards in additional ERC20 tokens (e.g., Honey)
+- Simplified staking experience with THJ validators
+
+## Features
+
+- **Liquid Staking**: Stake BERA while maintaining liquidity through fatBERA tokens
+- **Instant Rewards**: Earn WBERA rewards that are immediately claimable
+- **Multiple Reward Types**: Support for multiple reward tokens (WBERA, and soon other ERC20s)
+- **Secure Architecture**: Fully audited, upgradeable smart contracts
+- **Transparent Operation**: Open source code and public audit reports
+
+## Technical Details
+
+fatBERA is implemented as an ERC4626-compliant vault with the following key characteristics:
+- Upgradeable smart contracts using OpenZeppelin's UUPS pattern
+- Multi-token reward distribution system
+- Native BERA deposit support
+- Comprehensive security features and access controls
 
 ## Installation
 
@@ -21,17 +42,8 @@ cp .env.example .env
 
 2. Add your API keys to `.env`:
 ```
-BERASCAN_API_KEY=your_api_key_here
+PRIVATE_KEY=YourPrivateKey
 ```
-
-## Dependencies
-
-This project uses the following dependencies (automatically installed via `forge install`):
-- OpenZeppelin Contracts
-- OpenZeppelin Contracts Upgradeable
-- OpenZeppelin Foundry Upgrades
-- Forge Standard Library
-- Solady
 
 ## Development
 
@@ -45,73 +57,22 @@ To run tests:
 forge test
 ```
 
-## Audits
+## Security
 
+### Audits
 Audit reports can be found in the [audits](./audits) directory.
 
-## Foundry
-
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
-
-Foundry consists of:
-
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+### Dependencies
+This project uses the following audited dependencies:
+- OpenZeppelin Contracts
+- OpenZeppelin Contracts Upgradeable
+- OpenZeppelin Foundry Upgrades
+- Forge Standard Library
+- Solady
 
 ## Documentation
 
-https://book.getfoundry.sh/
+For Foundry documentation, visit: https://book.getfoundry.sh/
 
-## Usage
-
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+## License
+A THJ product 
