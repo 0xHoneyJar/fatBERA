@@ -2,6 +2,7 @@
 pragma solidity ^0.8.23;
 
 import {Test, console2} from "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
 import {fatBERA} from "../src/fatBERA.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockWETH} from "./mocks/MockWETH.sol";
@@ -47,11 +48,11 @@ contract fatBERATest is Test {
         vault = fatBERA(payable(proxy));
 
         // Debug logs
-        console2.log("Admin address:", admin);
-        console2.log("Proxy address:", address(proxy));
-        console2.log("Implementation address:", Upgrades.getImplementationAddress(address(proxy)));
-        console2.log("Admin has DEFAULT_ADMIN_ROLE:", vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin));
-        console2.log("Admin has REWARD_NOTIFIER_ROLE:", vault.hasRole(vault.REWARD_NOTIFIER_ROLE(), admin));
+        // console2.log("Admin address:", admin);
+        // console2.log("Proxy address:", address(proxy));
+        // console2.log("Implementation address:", Upgrades.getImplementationAddress(address(proxy)));
+        // console2.log("Admin has DEFAULT_ADMIN_ROLE:", vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin));
+        // console2.log("Admin has REWARD_NOTIFIER_ROLE:", vault.hasRole(vault.REWARD_NOTIFIER_ROLE(), admin));
 
         // Mint initial tokens to test accounts
         wbera.mint(alice, INITIAL_MINT);
@@ -955,7 +956,7 @@ contract fatBERATest is Test {
         vault.revokeRole(vault.REWARD_NOTIFIER_ROLE(), newNotifier);
         vm.stopPrank();
         assertFalse(vault.hasRole(vault.REWARD_NOTIFIER_ROLE(), newNotifier), "Role should be revoked");
-        console2.log("newNotifier", newNotifier);
+        console.log("newNotifier", newNotifier);
 
         bytes32 role = vault.REWARD_NOTIFIER_ROLE();
 
@@ -1318,7 +1319,7 @@ contract fatBERATest is Test {
         assertEq(vault.totalAssets(), totalDeposited, "totalAssets mismatch");
     }
 
-    function test_RewardSimulationScenarios() public {
+    function test_RewardSimulationScenario1() public {
         // Initial setup
         vm.prank(admin);
         vault.unpause();
@@ -1329,7 +1330,7 @@ contract fatBERATest is Test {
         // Setup initial balances and approvals
         wbera.mint(userA, 10 ether);
         wbera.mint(userB, 5 ether);
-        wbera.mint(admin, 1000000 ether); // Increased admin balance significantly
+        wbera.mint(admin, 1000000 ether);
         
         vm.prank(userA);
         wbera.approve(address(vault), type(uint256).max);
@@ -1338,8 +1339,8 @@ contract fatBERATest is Test {
         vm.prank(admin);
         wbera.approve(address(vault), type(uint256).max);
 
-        console2.log("\nScenario 1: 2-day reward duration, hourly notifications over 1 week");
-        console2.log("==============================================");
+        console.log("\nScenario 1: 2-day reward duration, hourly notifications over 1 week");
+        console.log("==============================================");
         
         // Set reward duration to 2 days
         vm.prank(admin);
@@ -1348,6 +1349,7 @@ contract fatBERATest is Test {
         // User A deposits 10 fatBERA at hour 0
         vm.prank(userA);
         vault.deposit(10 ether, userA);
+        console.log("Initial deposit - User A: 10 BERA");
 
         uint256 startTime = block.timestamp;
         
@@ -1366,90 +1368,92 @@ contract fatBERATest is Test {
             if (hour == 24) {
                 vm.prank(userB);
                 vault.deposit(5 ether, userB);
+                console.log("\nHour 24 - User B deposits 5 BERA");
+                console.log("User A rewards: %d", vault.previewRewards(userA, address(wbera)));
+                console.log("User B rewards: %d", vault.previewRewards(userB, address(wbera)));
             }
 
-            // Print rewards at key intervals
-            if (hour == 6 || hour == 12 || hour == 24 || hour == 48 || hour == 72 || hour == 96 || hour == 120 || hour == 144 || hour == 168) {
-                uint256 userARewards = vault.previewRewards(userA, address(wbera));
-                uint256 userBRewards = vault.previewRewards(userB, address(wbera));
-                console2.log("Time: %s hours", hour);
-                // console2.log("  Hourly reward: %s", hourlyReward);
-                // console2.log("  Total rewards notified: %s", hour * hourlyReward);
-                console2.log("  User A rewards: %s", userARewards);
-                console2.log("  User B rewards: %s", userBRewards);
-                console2.log("");
+            // Log at specific intervals
+            if (hour == 48 || hour == 96 || hour == 144) {
+                console.log("\nHour %d", hour);
+                console.log("User A rewards: %d", vault.previewRewards(userA, address(wbera)));
+                console.log("User B rewards: %d", vault.previewRewards(userB, address(wbera)));
             }
         }
 
-        // Clean up first scenario
-        uint256 lastNotificationTime = startTime + 168 hours;
-        vm.warp(lastNotificationTime + 3 days); // Back to 2 days wait
-        
-        // Claim all rewards
-        vm.prank(userA);
-        vault.claimRewards(address(userA));
-        vm.prank(userB);
-        vault.claimRewards(address(userB));
+        // Log final state
+        console.log("\nFinal State (Hour 168):");
+        console.log("User A rewards: %d", vault.previewRewards(userA, address(wbera)));
+        console.log("User B rewards: %d", vault.previewRewards(userB, address(wbera)));
+    }
 
-        // Withdraw all deposits
-        vm.prank(userA);
-        vault.withdraw(10 ether, userA, userA);
-        vm.prank(userB);
-        vault.withdraw(5 ether, userB, userB);
-
-        vm.warp(lastNotificationTime + 4 days); // Extra day to ensure clean state
-
-        console2.log("\nScenario 2: 2-day reward duration, 9-hour notifications over 1 week");
-        console2.log("==============================================");
-        
-        // Reset for second scenario
+    function test_RewardSimulationScenario2() public {
+        // Initial setup
         vm.prank(admin);
-        vault.setRewardsDuration(address(wbera), 3 days);
+        vault.unpause();
 
-        startTime = block.timestamp;
+        address userA = makeAddr("userA");
+        address userB = makeAddr("userB");
 
-        // User A deposits again for second scenario
+        // Setup initial balances and approvals
+        wbera.mint(userA, 10 ether);
+        wbera.mint(userB, 5 ether);
+        wbera.mint(admin, 1000000 ether);
+        
+        vm.prank(userA);
+        wbera.approve(address(vault), type(uint256).max);
+        vm.prank(userB);
+        wbera.approve(address(vault), type(uint256).max);
+        vm.prank(admin);
+        wbera.approve(address(vault), type(uint256).max);
+
+        console.log("\nScenario 2: 2-day reward duration, 48-hour notifications over 1 week");
+        console.log("==============================================");
+        
+        // Set reward duration to 2 days
+        vm.prank(admin);
+        vault.setRewardsDuration(address(wbera), 2 days);
+
+        // User A deposits for second scenario
         vm.prank(userA);
         vault.deposit(10 ether, userA);
+        console.log("Initial deposit - User A: 10 BERA");
 
+        uint256 startTime = block.timestamp;
         uint256 totalRewardsNotified = 0;
-        uint256 lastNotificationHour = 0;
 
-        // Simulate hourly checks but 9-hour notifications for second scenario over a week
+        // Simulate hourly checks but 48-hour notifications
         for (uint256 hour = 1; hour <= 168; hour++) {
             vm.warp(startTime + hour * 1 hours);
             
-            // Notify rewards every 9 hours
-            if (hour % 72 == 0) {
+            // Notify rewards every 48 hours (2 days)
+            if (hour % 48 == 0) {
                 uint256 totalStaked = hour <= 24 ? 10 ether : 15 ether;
-                uint256 nineHourReward = (totalStaked / 10) * 3 ;
+                uint256 twoDayReward = (totalStaked / 10) * 2;
                 
                 vm.prank(admin);
-                vault.notifyRewardAmount(address(wbera), nineHourReward);
-                totalRewardsNotified += nineHourReward;
-                lastNotificationHour = hour;
+                vault.notifyRewardAmount(address(wbera), twoDayReward);
+                totalRewardsNotified += twoDayReward;
+
+                console.log("\nHour %d - Notified reward: %d", hour, twoDayReward);
+                console.log("User A rewards: %d", vault.previewRewards(userA, address(wbera)));
+                console.log("User B rewards: %d", vault.previewRewards(userB, address(wbera)));
             }
 
             // Add User B's deposit at 24 hours
             if (hour == 24) {
                 vm.prank(userB);
                 vault.deposit(5 ether, userB);
-            }
-
-            // Print rewards at key intervals
-            if (hour == 6 || hour == 12 || hour == 24 || hour == 48 || hour == 72 || hour == 96 || hour == 120 || hour == 144 || hour == 168) {
-                uint256 userARewards = vault.previewRewards(userA, address(wbera));
-                uint256 userBRewards = vault.previewRewards(userB, address(wbera));
-                console2.log("Time: %s hours", hour);
-                // if (lastNotificationHour > 0) {
-                //     uint256 currentNineHourReward = (hour <= 24 ? 10 ether : 15 ether) ;
-                //     console2.log("  Last 9-hour reward: %s", currentNineHourReward);
-                //     console2.log("  Total rewards notified: %s", totalRewardsNotified);
-                // }
-                console2.log("  User A rewards: %s", userARewards);
-                console2.log("  User B rewards: %s", userBRewards);
-                console2.log("");
+                console.log("\nHour 24 - User B deposits 5 BERA");
+                console.log("User A rewards: %d", vault.previewRewards(userA, address(wbera)));
+                console.log("User B rewards: %d", vault.previewRewards(userB, address(wbera)));
             }
         }
+
+        // Log final state
+        console.log("\nFinal State (Hour 168):");
+        console.log("Total Rewards Notified: %d", totalRewardsNotified);
+        console.log("User A rewards: %d", vault.previewRewards(userA, address(wbera)));
+        console.log("User B rewards: %d", vault.previewRewards(userB, address(wbera)));
     }
 }
