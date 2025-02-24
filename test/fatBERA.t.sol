@@ -1317,4 +1317,139 @@ contract fatBERATest is Test {
         assertEq(vault.totalSupply(), totalDeposited, "totalSupply mismatch");
         assertEq(vault.totalAssets(), totalDeposited, "totalAssets mismatch");
     }
+
+    function test_RewardSimulationScenarios() public {
+        // Initial setup
+        vm.prank(admin);
+        vault.unpause();
+
+        address userA = makeAddr("userA");
+        address userB = makeAddr("userB");
+
+        // Setup initial balances and approvals
+        wbera.mint(userA, 10 ether);
+        wbera.mint(userB, 5 ether);
+        wbera.mint(admin, 1000000 ether); // Increased admin balance significantly
+        
+        vm.prank(userA);
+        wbera.approve(address(vault), type(uint256).max);
+        vm.prank(userB);
+        wbera.approve(address(vault), type(uint256).max);
+        vm.prank(admin);
+        wbera.approve(address(vault), type(uint256).max);
+
+        console2.log("\nScenario 1: 2-day reward duration, hourly notifications over 1 week");
+        console2.log("==============================================");
+        
+        // Set reward duration to 2 days
+        vm.prank(admin);
+        vault.setRewardsDuration(address(wbera), 2 days);
+
+        // User A deposits 10 fatBERA at hour 0
+        vm.prank(userA);
+        vault.deposit(10 ether, userA);
+
+        uint256 startTime = block.timestamp;
+        
+        // Simulate hourly notifications for first scenario over a week
+        for (uint256 hour = 1; hour <= 168; hour++) {
+            vm.warp(startTime + hour * 1 hours);
+            
+            // Calculate hourly reward: 1 BERA per day per fatBERA
+            uint256 totalStaked = hour <= 24 ? 10 ether : 15 ether;
+            uint256 hourlyReward = (totalStaked / 10) / 24; // Direct calculation for hourly rate
+            
+            vm.prank(admin);
+            vault.notifyRewardAmount(address(wbera), hourlyReward);
+
+            // Add User B's deposit at 24 hours
+            if (hour == 24) {
+                vm.prank(userB);
+                vault.deposit(5 ether, userB);
+            }
+
+            // Print rewards at key intervals
+            if (hour == 6 || hour == 12 || hour == 24 || hour == 48 || hour == 72 || hour == 96 || hour == 120 || hour == 144 || hour == 168) {
+                uint256 userARewards = vault.previewRewards(userA, address(wbera));
+                uint256 userBRewards = vault.previewRewards(userB, address(wbera));
+                console2.log("Time: %s hours", hour);
+                // console2.log("  Hourly reward: %s", hourlyReward);
+                // console2.log("  Total rewards notified: %s", hour * hourlyReward);
+                console2.log("  User A rewards: %s", userARewards);
+                console2.log("  User B rewards: %s", userBRewards);
+                console2.log("");
+            }
+        }
+
+        // Clean up first scenario
+        uint256 lastNotificationTime = startTime + 168 hours;
+        vm.warp(lastNotificationTime + 3 days); // Back to 2 days wait
+        
+        // Claim all rewards
+        vm.prank(userA);
+        vault.claimRewards(address(userA));
+        vm.prank(userB);
+        vault.claimRewards(address(userB));
+
+        // Withdraw all deposits
+        vm.prank(userA);
+        vault.withdraw(10 ether, userA, userA);
+        vm.prank(userB);
+        vault.withdraw(5 ether, userB, userB);
+
+        vm.warp(lastNotificationTime + 4 days); // Extra day to ensure clean state
+
+        console2.log("\nScenario 2: 2-day reward duration, 9-hour notifications over 1 week");
+        console2.log("==============================================");
+        
+        // Reset for second scenario
+        vm.prank(admin);
+        vault.setRewardsDuration(address(wbera), 3 days);
+
+        startTime = block.timestamp;
+
+        // User A deposits again for second scenario
+        vm.prank(userA);
+        vault.deposit(10 ether, userA);
+
+        uint256 totalRewardsNotified = 0;
+        uint256 lastNotificationHour = 0;
+
+        // Simulate hourly checks but 9-hour notifications for second scenario over a week
+        for (uint256 hour = 1; hour <= 168; hour++) {
+            vm.warp(startTime + hour * 1 hours);
+            
+            // Notify rewards every 9 hours
+            if (hour % 72 == 0) {
+                uint256 totalStaked = hour <= 24 ? 10 ether : 15 ether;
+                uint256 nineHourReward = (totalStaked / 10) * 3 ;
+                
+                vm.prank(admin);
+                vault.notifyRewardAmount(address(wbera), nineHourReward);
+                totalRewardsNotified += nineHourReward;
+                lastNotificationHour = hour;
+            }
+
+            // Add User B's deposit at 24 hours
+            if (hour == 24) {
+                vm.prank(userB);
+                vault.deposit(5 ether, userB);
+            }
+
+            // Print rewards at key intervals
+            if (hour == 6 || hour == 12 || hour == 24 || hour == 48 || hour == 72 || hour == 96 || hour == 120 || hour == 144 || hour == 168) {
+                uint256 userARewards = vault.previewRewards(userA, address(wbera));
+                uint256 userBRewards = vault.previewRewards(userB, address(wbera));
+                console2.log("Time: %s hours", hour);
+                // if (lastNotificationHour > 0) {
+                //     uint256 currentNineHourReward = (hour <= 24 ? 10 ether : 15 ether) ;
+                //     console2.log("  Last 9-hour reward: %s", currentNineHourReward);
+                //     console2.log("  Total rewards notified: %s", totalRewardsNotified);
+                // }
+                console2.log("  User A rewards: %s", userARewards);
+                console2.log("  User B rewards: %s", userBRewards);
+                console2.log("");
+            }
+        }
+    }
 }
