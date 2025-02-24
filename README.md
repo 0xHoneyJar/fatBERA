@@ -40,7 +40,7 @@ forge install
 cp .env.example .env
 ```
 
-2. Add your API keys to `.env`:
+2. Add your private key if looking to deploy in `.env`:
 ```
 PRIVATE_KEY=YourPrivateKey
 ```
