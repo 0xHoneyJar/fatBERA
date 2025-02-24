@@ -75,4 +75,4 @@ This project uses the following audited dependencies:
 For Foundry documentation, visit: https://book.getfoundry.sh/
 
 ## License
-A THJ product 
+[LICENSE](./LICENSE) 
