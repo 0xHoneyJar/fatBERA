@@ -1,0 +1,26 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+cache_path = 'cache'
+
+solc = "0.8.23"
+
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+    "solady/=lib/solady/src/"
+]
+ffi = true
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
+
+[rpc_endpoints]
+bArtio = "https://bartio.rpc.berachain.com/"
+cArtio = "https://woodbeard-eth-cartio.berachain.com"
+
+[etherscan]
+bArtio = { key = "verifyContract", url = "https://api.routescan.io/v2/network/testnet/evm/80084/etherscan", chain = 80084 }
+cArtio = { key = "verifyContract", url = "https://api.routescan.io/v2/network/testnet/evm/80000/etherscan", chain = 80000 }
+berachain = { key = "${BERASCAN_API_KEY}", url = "https://api.berascan.com/api", chain = 80094 } 

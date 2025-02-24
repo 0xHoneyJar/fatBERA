@@ -1,3 +1,54 @@
+# LST (Liquid Staking Token)
+
+## Overview
+LST is a liquid staking solution for Berachain, allowing users to stake their BERA while maintaining liquidity through the fatBERA token.
+
+## Installation
+
+1. Install [Foundry](https://book.getfoundry.sh/getting-started/installation)
+2. Clone this repository
+3. Install dependencies:
+```bash
+forge install
+```
+
+## Setup
+
+1. Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+
+2. Add your API keys to `.env`:
+```
+BERASCAN_API_KEY=your_api_key_here
+```
+
+## Dependencies
+
+This project uses the following dependencies (automatically installed via `forge install`):
+- OpenZeppelin Contracts
+- OpenZeppelin Contracts Upgradeable
+- OpenZeppelin Foundry Upgrades
+- Forge Standard Library
+- Solady
+
+## Development
+
+To build the project:
+```bash
+forge build
+```
+
+To run tests:
+```bash
+forge test
+```
+
+## Audits
+
+Audit reports can be found in the [audits](./audits) directory.
+
 ## Foundry
 
 **Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
