@@ -65,16 +65,18 @@ contract AutomatedStake is
     error NoFundsToRescue();
     error TransferFailed();
     error InsufficientStakeAmount(uint256 amount, uint256 minimum);
+    error InvalidValidatorIndex(uint256 index, uint256 maxIndex);
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           EVENTS                             */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    event WithdrawUnwrapAndStakeExecuted(uint256 indexed amount, bytes indexed pubkey);
-    event ValidatorPubkeyUpdated(bytes newPubkey);
-    event WithdrawalCredentialsUpdated(bytes newWithdrawalCredentials);
-    event ValidatorSignatureUpdated(bytes newSignature);
-    event ValidatorOperatorUpdated(address newOperator);
+    event WithdrawUnwrapAndStakeExecuted(uint256 indexed amount, uint256 indexed validatorIndex, bytes indexed pubkey);
+    event ValidatorAdded(uint256 indexed index, bytes pubkey, address operator);
+    event ValidatorPubkeyUpdated(uint256 indexed index, bytes newPubkey);
+    event WithdrawalCredentialsUpdated(uint256 indexed index, bytes newWithdrawalCredentials);
+    event ValidatorSignatureUpdated(uint256 indexed index, bytes newSignature);
+    event ValidatorOperatorUpdated(uint256 indexed index, address newOperator);
     event FundsRescued(address recipient, uint256 amount);
     event TokensRescued(address token, address recipient, uint256 amount);
     event MinimumStakeAmountUpdated(uint256 newAmount);
@@ -83,18 +85,23 @@ contract AutomatedStake is
     /*                          STORAGE                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant STAKER_ROLE = keccak256("STAKER_ROLE");
 
     // Addresses of the external contracts we interact with.
     address public fatBera;
     address public wBera;
     address public beaconDeposit;
 
-    // Validator deposit parameters needed for the beacon deposit.
-    bytes public validatorPubkey;
-    bytes public withdrawalCredentials;
-    bytes public validatorSignature;
-    address public validatorOperator;
+    // Validator struct to store all parameters for a single validator
+    struct Validator {
+        bytes pubkey;
+        bytes withdrawalCredentials;
+        bytes signature;
+        address operator;
+    }
+
+    // Array to store multiple validators
+    Validator[] public validators;
 
     // Minimum amount required for staking (initially 15,000 WBERA)
     uint256 public minimumStakeAmount;
@@ -113,29 +120,23 @@ contract AutomatedStake is
      * @param _fatBera The address of the fatBERA contract.
      * @param _wBera The address of the wrapped BERA token contract.
      * @param _beaconDeposit The address of the beacon deposit contract.
-     * @param _validatorPubkey The validator public key in bytes.
-     * @param _withdrawalCredentials The withdrawal credentials in bytes.
-     * @param _validatorSignature The validator signature in bytes.
-     * @param _validatorOperator The validator operator's address.
-     * @param operatorAdmin The multisig address that will be granted admin AND operator roles.
-     * @param operator The address that will be granted operator role to execute the staking process.
+     * @param initialValidators Array of initial validator parameters (up to 3)
+     * @param operatorAdmin The multisig address that will be granted admin AND staker roles.
+     * @param staker The address that will be granted staker role to execute the staking process.
      */
     function initialize(
         address _fatBera,
         address _wBera,
         address _beaconDeposit,
-        bytes memory _validatorPubkey,
-        bytes memory _withdrawalCredentials,
-        bytes memory _validatorSignature,
-        address _validatorOperator,
+        Validator[] memory initialValidators,
         address operatorAdmin,
-        address operator
+        address staker
     ) external initializer {
         if (_fatBera == address(0) || 
             _wBera == address(0) || 
             _beaconDeposit == address(0) || 
             operatorAdmin == address(0) ||
-            operator == address(0)
+            staker == address(0)
         ) {
             revert InvalidAddress();
         }
@@ -147,18 +148,20 @@ contract AutomatedStake is
         fatBera = _fatBera;
         wBera = _wBera;
         beaconDeposit = _beaconDeposit;
-        validatorPubkey = _validatorPubkey;
-        withdrawalCredentials = _withdrawalCredentials;
-        validatorSignature = _validatorSignature;
-        validatorOperator = _validatorOperator;
+
+        // Add initial validators
+        for (uint256 i = 0; i < initialValidators.length; i++) {
+            validators.push(initialValidators[i]);
+            emit ValidatorAdded(i, initialValidators[i].pubkey, initialValidators[i].operator);
+        }
 
         // Set initial minimum stake amount to 15,000 WBERA (15,000 * 10^18)
         minimumStakeAmount = 15_000 ether;
 
-        // Set up roles - DEFAULT_ADMIN_ROLE for multisig, OPERATOR_ROLE for automated operator
+        // Set up roles - DEFAULT_ADMIN_ROLE for multisig, STAKER_ROLE for automated staker
         _grantRole(DEFAULT_ADMIN_ROLE, operatorAdmin);
-        _grantRole(OPERATOR_ROLE, operatorAdmin);
-        _grantRole(OPERATOR_ROLE, operator);
+        _grantRole(STAKER_ROLE, operatorAdmin);
+        _grantRole(STAKER_ROLE, staker);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -168,14 +171,21 @@ contract AutomatedStake is
     /**
      * @notice Executes the process to withdraw principal from fatBERA, unwrap WBERA to native BERA,
      * and deposit it to the beacon deposit contract.
-     * @dev This function is protected by the OPERATOR_ROLE and reentrancy guard.
+     * @dev This function is protected by the STAKER_ROLE and reentrancy guard.
      * @param amount The exact amount to withdraw and stake. Must be >= minimumStakeAmount and <= current deposit principal
+     * @param validatorIndex The index of the validator to stake to (0, 1, or 2)
      */
-    function executeWithdrawUnwrapAndStake(uint256 amount) external onlyRole(OPERATOR_ROLE) nonReentrant {
+    function executeWithdrawUnwrapAndStake(uint256 amount, uint256 validatorIndex) external onlyRole(STAKER_ROLE) nonReentrant {
         if (amount == 0) revert ZeroAmount();
         if (amount < minimumStakeAmount) {
             revert InsufficientStakeAmount(amount, minimumStakeAmount);
         }
+        if (validatorIndex >= validators.length) {
+            revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
+        }
+
+        // Get the validator data
+        Validator memory validator = validators[validatorIndex];
 
         // Step 1: Withdraw principal from fatBERA.
         IFatBera(fatBera).withdrawPrincipal(amount, address(this));
@@ -185,13 +195,13 @@ contract AutomatedStake is
 
         // Step 3: Stake to the validator via the beacon deposit contract.
         IBeaconDeposit(beaconDeposit).deposit{value: amount}(
-            validatorPubkey,
-            withdrawalCredentials,
-            validatorSignature,
-            validatorOperator
+            validator.pubkey,
+            validator.withdrawalCredentials,
+            validator.signature,
+            validator.operator
         );
 
-        emit WithdrawUnwrapAndStakeExecuted(amount, validatorPubkey);
+        emit WithdrawUnwrapAndStakeExecuted(amount, validatorIndex, validator.pubkey);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -199,42 +209,88 @@ contract AutomatedStake is
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /**
+     * @notice Admin function to add a new validator.
+     * @param pubkey Validator public key
+     * @param withdrawalCredentials Withdrawal credentials
+     * @param signature Validator signature
+     * @param operator Validator operator address
+     * @dev This function can only be called by the admin (multisig)
+     */
+    function addValidator(
+        bytes calldata pubkey,
+        bytes calldata withdrawalCredentials,
+        bytes calldata signature,
+        address operator
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        
+        uint256 index = validators.length;
+        validators.push(Validator({
+            pubkey: pubkey,
+            withdrawalCredentials: withdrawalCredentials,
+            signature: signature,
+            operator: operator
+        }));
+        
+        emit ValidatorAdded(index, pubkey, operator);
+    }
+
+    /**
      * @notice Admin function to update the validator public key.
+     * @param validatorIndex Index of the validator to update
      * @param newPubkey New validator public key
      * @dev This is the most commonly updated parameter when adding new validators
      */
-    function setValidatorPubkey(bytes calldata newPubkey) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        validatorPubkey = newPubkey;
-        emit ValidatorPubkeyUpdated(newPubkey);
+    function setValidatorPubkey(uint256 validatorIndex, bytes calldata newPubkey) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (validatorIndex >= validators.length) {
+            revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
+        }
+        
+        validators[validatorIndex].pubkey = newPubkey;
+        emit ValidatorPubkeyUpdated(validatorIndex, newPubkey);
     }
 
     /**
      * @notice Admin function to update the withdrawal credentials.
+     * @param validatorIndex Index of the validator to update
      * @param newWithdrawalCredentials New withdrawal credentials
      * @dev This should rarely need to be updated as it's typically the same for all validators
      */
-    function setWithdrawalCredentials(bytes calldata newWithdrawalCredentials) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        withdrawalCredentials = newWithdrawalCredentials;
-        emit WithdrawalCredentialsUpdated(newWithdrawalCredentials);
+    function setWithdrawalCredentials(uint256 validatorIndex, bytes calldata newWithdrawalCredentials) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (validatorIndex >= validators.length) {
+            revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
+        }
+        
+        validators[validatorIndex].withdrawalCredentials = newWithdrawalCredentials;
+        emit WithdrawalCredentialsUpdated(validatorIndex, newWithdrawalCredentials);
     }
 
     /**
      * @notice Admin function to update the validator signature.
+     * @param validatorIndex Index of the validator to update
      * @param newSignature New validator signature
      */
-    function setValidatorSignature(bytes calldata newSignature) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        validatorSignature = newSignature;
-        emit ValidatorSignatureUpdated(newSignature);
+    function setValidatorSignature(uint256 validatorIndex, bytes calldata newSignature) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (validatorIndex >= validators.length) {
+            revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
+        }
+        
+        validators[validatorIndex].signature = newSignature;
+        emit ValidatorSignatureUpdated(validatorIndex, newSignature);
     }
 
     /**
      * @notice Admin function to update the validator operator address.
+     * @param validatorIndex Index of the validator to update
      * @param newOperator New validator operator address
      */
-    function setValidatorOperator(address newOperator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setValidatorOperator(uint256 validatorIndex, address newOperator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (validatorIndex >= validators.length) {
+            revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
+        }
         if (newOperator == address(0)) revert InvalidAddress();
-        validatorOperator = newOperator;
-        emit ValidatorOperatorUpdated(newOperator);
+        
+        validators[validatorIndex].operator = newOperator;
+        emit ValidatorOperatorUpdated(validatorIndex, newOperator);
     }
 
     /**
