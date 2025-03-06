@@ -287,7 +287,6 @@ contract AutomatedStake is
         if (validatorIndex >= validators.length) {
             revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
         }
-        if (newOperator == address(0)) revert InvalidAddress();
         
         validators[validatorIndex].operator = newOperator;
         emit ValidatorOperatorUpdated(validatorIndex, newOperator);

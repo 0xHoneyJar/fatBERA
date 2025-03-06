@@ -23,4 +23,4 @@ cArtio = "https://woodbeard-eth-cartio.berachain.com"
 [etherscan]
 bArtio = { key = "verifyContract", url = "https://api.routescan.io/v2/network/testnet/evm/80084/etherscan", chain = 80084 }
 cArtio = { key = "verifyContract", url = "https://api.routescan.io/v2/network/testnet/evm/80000/etherscan", chain = 80000 }
-berachain = { key = "${BERASCAN_API_KEY}", url = "https://api.berascan.com/api", chain = 80094 } 
+berachain = { key = "DGIVNY6US54E8GYMBW284CI7ZDSFSC4CG", url = "https://api.berascan.com/api", chain = 80094 }
