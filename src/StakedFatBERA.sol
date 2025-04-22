@@ -22,9 +22,9 @@ contract StakedFatBERA is
     /* ───────────────────────────────────────────────────────────────────────────
         CONSTANTS
     ─────────────────────────────────────────────────────────────────────────── */
-    bytes32 constant OPERATOR_ROLE  = keccak256("OPERATOR_ROLE");
-    bytes32 constant ADMIN_ROLE     = DEFAULT_ADMIN_ROLE;
-    IERC20  constant WBERA          = IERC20(0x6969696969696969696969696969696969696969);
+    bytes32 public constant OPERATOR_ROLE  = keccak256("OPERATOR_ROLE");
+    bytes32 public constant ADMIN_ROLE     = DEFAULT_ADMIN_ROLE;
+    IERC20  public constant WBERA          = IERC20(0x6969696969696969696969696969696969696969);
 
     /* ───────────────────────────────────────────────────────────────────────────
         STORAGE
@@ -68,7 +68,7 @@ contract StakedFatBERA is
     /*────────────────────────────────────────────────────────────────────────────
         OPERATOR LOGIC
     ────────────────────────────────────────────────────────────────────────────*/
-    function compound() public {
+    function compound() public onlyRole(OPERATOR_ROLE) {
         fatBERA.claimRewards(address(this));
         uint256 amount = fatBERA.deposit(WBERA.balanceOf(address(this)), address(this));
         emit Compounded(amount);

@@ -18,6 +18,7 @@ contract stFatBERATest is Test {
     // ------------------------------------------------------------------------
     address owner       = makeAddr("owner");
     address user        = makeAddr("user");
+    address operator    = makeAddr("operator");
     // ------------------------------------------------------------------------
     function setUp() public {
         vm.createSelectFork("https://rpc.berachain.com", 4048939);
@@ -25,6 +26,7 @@ contract stFatBERATest is Test {
         vm.startPrank(owner);
         bytes memory initData = abi.encodeWithSelector(StakedFatBERA.initialize.selector, owner, address(fatBERA));
         stFatBERA = StakedFatBERA(Upgrades.deployUUPSProxy("StakedFatBERA.sol:StakedFatBERA", initData));
+        stFatBERA.grantRole(stFatBERA.OPERATOR_ROLE(), operator);
         vm.stopPrank();
 
         vm.label(address(stFatBERA), "stFatBERA");
@@ -78,6 +80,7 @@ contract stFatBERATest is Test {
         vm.warp(block.timestamp + 7 days);
 
         // compound stFatBERA
+        vm.prank(operator);
         stFatBERA.compound();
         assertGt(fatBERA.balanceOf(address(stFatBERA)), AMOUNT_TO_DEPOSIT, "stFatBERA's FatBERa holdings should increase");
 
