@@ -13,3 +13,8 @@ docs/
 
 # Deployment files
 deployments.txt
+
+.trigger
+
+
+node_modules/
