@@ -18,3 +18,5 @@ deployments.txt
 
 
 node_modules/
+
+test/Playground.t.sol
