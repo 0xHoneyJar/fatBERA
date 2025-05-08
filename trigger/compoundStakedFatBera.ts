@@ -26,7 +26,7 @@ export const compoundStakedFatBera = schedules.task({
     });
 
     const hash = await client.writeContract({
-      address: "0xA0EC2e41E54Da64375ee9B0dc9f140d14EE8815e", // staked FatBERA
+      address: "0xe4F5E6586CD6bff230948bD1e3973C5105ad92fC", // staked FatBERA
       abi: [
         {
           inputs: [],

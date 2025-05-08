@@ -9,7 +9,7 @@ import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 contract Deploy is Script {
     address constant FATBERA    = 0xBAE11292A3E693aF73651BDa350D752AE4A391D4;
     address constant OPERATOR   = 0xaF582c3335D51F2DFd749F9a476eBEAb6eC5233D;
-    address constant MS         = 0x0000000000000000000000000000000000000000;
+    address constant MS         = 0xE6644e0b941A03Af8ff10BDB185d5E74D520270e;
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -28,8 +28,7 @@ contract Deploy is Script {
         // mint shares that will be locked forever
         FatBERA(FATBERA).depositNative{value: 1 ether}(deployer);
         FatBERA(FATBERA).approve(address(stFatBera), 1 ether);
-        stFatBera.deposit(1 ether, deployer);
-        stFatBera.transfer(address(0x42069), stFatBera.balanceOf(deployer));
+        stFatBera.deposit(1 ether, address(0x42069));
 
         // remove admin role from deployer
         stFatBera.revokeRole(stFatBera.ADMIN_ROLE(), deployer);
