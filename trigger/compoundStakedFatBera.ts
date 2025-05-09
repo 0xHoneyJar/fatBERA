@@ -18,15 +18,15 @@ export const compoundStakedFatBera = schedules.task({
     const client = createWalletClient({
       account,
       chain: berachain,
-      transport: http(),
+      transport: http("http://57.129.49.205:8545/"),
     });
     const publicClient = createPublicClient({
       chain: berachain,
-      transport: http(),
+      transport: http("http://57.129.49.205:8545/"),
     });
 
     const hash = await client.writeContract({
-      address: "0xe4F5E6586CD6bff230948bD1e3973C5105ad92fC", // staked FatBERA
+      address: "0xcAc89B3F94eD6BAb04113884deeE2A55293c2DD7", // staked FatBERA
       abi: [
         {
           inputs: [],

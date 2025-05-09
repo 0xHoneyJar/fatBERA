@@ -26,9 +26,10 @@ contract Deploy is Script {
 
 
         // mint shares that will be locked forever
-        FatBERA(FATBERA).depositNative{value: 1 ether}(deployer);
-        FatBERA(FATBERA).approve(address(stFatBera), 1 ether);
+        FatBERA(FATBERA).depositNative{value: 2 ether}(deployer);
+        FatBERA(FATBERA).approve(address(stFatBera), 2 ether);
         stFatBera.deposit(1 ether, address(0x42069));
+        stFatBera.deposit(1 ether, deployer);
 
         // remove admin role from deployer
         stFatBera.revokeRole(stFatBera.ADMIN_ROLE(), deployer);

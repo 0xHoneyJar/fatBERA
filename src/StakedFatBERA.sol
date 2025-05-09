@@ -44,7 +44,7 @@ contract StakedFatBERA is
         fatBERA = FatBERA(_fatBERA);
         __UUPSUpgradeable_init();
         __ERC4626_init(IERC20(_fatBERA));
-        __ERC20_init("XL FatBERA", "xlfatBERA");
+        __ERC20_init("Extra FatBERA", "xfatBERA");
         __Pausable_init();
         __AccessControl_init();
 
