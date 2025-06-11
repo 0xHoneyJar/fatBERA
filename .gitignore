@@ -14,3 +14,10 @@ docs/
 # Deployment files
 deployments.txt
 lib/
+
+.trigger
+
+
+node_modules/
+
+test/Playground.t.sol
