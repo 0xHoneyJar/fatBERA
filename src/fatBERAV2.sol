@@ -51,6 +51,7 @@ contract fatBERAV2 is
     error BatchAlreadyFulfilled();
     error InsufficientAssets();
     error NothingToClaim();
+    error BatchEmpty();
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STRUCTS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -625,13 +626,13 @@ contract fatBERAV2 is
      */
     function requestWithdraw(uint256 shares) external nonReentrant {
         if (shares == 0) revert ZeroShares();
-        _updateRewards(msg.sender);
 
         Batch storage b = batches[currentBatchId];
-        if (b.frozen) revert BatchFrozen();
+        if (b.frozen) revert BatchFrozen(); // Might not need this since freezing a batch just increments the currentBatchId
 
+        _updateRewards(msg.sender);
         _burn(msg.sender, shares);
-
+        
         b.users.push(msg.sender);
         b.amounts.push(shares);
         b.total += shares;
@@ -643,16 +644,23 @@ contract fatBERAV2 is
     }
 
     /**
-     * @notice Admin closes the current batch and emits the total to unstake.
+     * @notice WithdrawalFulfiller closes the current batch and emits the total to unstake.
+     * @return batchId The ID of the batch that was started.
+     * @return total The total amount of shares in the batch.
      */
-    function startWithdrawalBatch() external onlyRole(WITHDRAW_FULFILLER_ROLE) {
+    function startWithdrawalBatch() external onlyRole(WITHDRAW_FULFILLER_ROLE) returns (uint256 batchId, uint256 total) {
         Batch storage b = batches[currentBatchId];
         if (b.frozen) revert BatchAlreadyFrozen();
+        if (b.total == 0) revert BatchEmpty();
 
         b.frozen = true;
-        emit BatchStarted(currentBatchId, b.total);
+        batchId = currentBatchId;
+        total = b.total;
+        
+        emit BatchStarted(batchId, total);
 
         currentBatchId++;
+        return (batchId, total);
     }
 
     /**

@@ -1710,12 +1710,8 @@ contract fatBERATest is Test {
     function test_FulfillEmptyBatch() public {
         // Start empty batch
         vm.prank(fulfiller);
+        vm.expectRevert(fatBERAV2.BatchEmpty.selector);
         vault.startWithdrawalBatch();
-
-        // Try to fulfill empty batch
-        vm.prank(fulfiller);
-        vm.expectRevert(fatBERAV2.NothingToClaim.selector);
-        vault.fulfillBatch(1, 0);
     }
 
     function test_ClaimWithdrawnAssetsRevertsNothingToClaim() public {
@@ -1946,6 +1942,749 @@ contract fatBERATest is Test {
         vault.claimWithdrawnAssets();
 
         assertEq(wbera.balanceOf(alice) - balanceBefore, netAmount, "Should receive net amount");
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                    EDGE CASE TESTS                         */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    function test_MultipleWithdrawsBeforeFirstFulfilled() public {
+        // Alice deposits 300
+        vm.prank(alice);
+        vault.deposit(300e18, alice);
+
+        // Alice requests first withdrawal in batch 1
+        vm.prank(alice);
+        vault.requestWithdraw(100e18);
+
+        // Start batch 1
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Alice requests second withdrawal in batch 2 (before batch 1 is fulfilled)
+        vm.prank(alice);
+        vault.requestWithdraw(50e18);
+
+        // Alice requests third withdrawal in batch 2
+        vm.prank(alice);
+        vault.requestWithdraw(75e18);
+
+        // Start batch 2
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Check Alice's state
+        assertEq(vault.balanceOf(alice), 75e18, "Alice should have 75 shares left");
+        assertEq(vault.pending(alice), 225e18, "Alice should have 225 shares pending across batches");
+
+        // Fulfill batch 1 first
+        wbera.mint(fulfiller, 100e18);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), 100e18);
+        vault.fulfillBatch(1, 0);
+        vm.stopPrank();
+
+        // Alice should have claimable from batch 1
+        assertEq(vault.claimable(alice), 100e18, "Alice should have 100 claimable from batch 1");
+        assertEq(vault.pending(alice), 125e18, "Alice should have 125 pending in batch 2");
+
+        // Fulfill batch 2
+        wbera.mint(fulfiller, 125e18);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), 125e18);
+        vault.fulfillBatch(2, 0);
+        vm.stopPrank();
+
+        // Alice should have total claimable from both batches
+        assertEq(vault.claimable(alice), 225e18, "Alice should have 225 total claimable");
+        assertEq(vault.pending(alice), 0, "Alice should have 0 pending");
+    }
+
+    function test_ClaimFromMultipleBatchesSequentially() public {
+        // Setup: Alice deposits and creates two withdrawal batches
+        vm.prank(alice);
+        vault.deposit(200e18, alice);
+
+        // Batch 1: 80 shares
+        vm.prank(alice);
+        vault.requestWithdraw(80e18);
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Batch 2: 60 shares
+        vm.prank(alice);
+        vault.requestWithdraw(60e18);
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Fulfill batch 1 with 2% fee
+        uint256 fee1 = 80e18 * 2 / 100;
+        uint256 net1 = 80e18 - fee1;
+        wbera.mint(fulfiller, net1);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), net1);
+        vault.fulfillBatch(1, fee1);
+        vm.stopPrank();
+
+        // Alice claims from batch 1
+        uint256 balanceBefore = wbera.balanceOf(alice);
+        vm.prank(alice);
+        vault.claimWithdrawnAssets();
+        uint256 claimed1 = wbera.balanceOf(alice) - balanceBefore;
+        assertEq(claimed1, net1, "Alice should receive net amount from batch 1");
+        assertEq(vault.claimable(alice), 0, "Alice should have 0 claimable after first claim");
+
+        // Fulfill batch 2 with 3% fee
+        uint256 fee2 = 60e18 * 3 / 100;
+        uint256 net2 = 60e18 - fee2;
+        wbera.mint(fulfiller, net2);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), net2);
+        vault.fulfillBatch(2, fee2);
+        vm.stopPrank();
+
+        // Alice claims from batch 2
+        balanceBefore = wbera.balanceOf(alice);
+        vm.prank(alice);
+        vault.claimWithdrawnAssets();
+        uint256 claimed2 = wbera.balanceOf(alice) - balanceBefore;
+        assertEq(claimed2, net2, "Alice should receive net amount from batch 2");
+        assertEq(vault.claimable(alice), 0, "Alice should have 0 claimable after second claim");
+
+        // Verify total claimed
+        assertEq(claimed1 + claimed2, net1 + net2, "Total claimed should equal sum of net amounts");
+    }
+
+    function test_V1AccountingNotAffectedByV2Withdrawals() public {
+        // Record initial state
+        uint256 initialDepositPrincipal = vault.depositPrincipal();
+        uint256 initialTotalSupply = vault.totalSupply();
+
+        // Alice and Bob deposit (V1 style deposits)
+        vm.prank(alice);
+        vault.deposit(200e18, alice);
+        vm.prank(bob);
+        vault.deposit(100e18, bob);
+
+        uint256 afterDepositsDepositPrincipal = vault.depositPrincipal();
+        uint256 afterDepositsTotalSupply = vault.totalSupply();
+
+        // Verify deposits updated accounting correctly
+        assertEq(afterDepositsDepositPrincipal, initialDepositPrincipal + 300e18, "depositPrincipal should increase by 300");
+        assertEq(afterDepositsTotalSupply, initialTotalSupply + 300e18, "totalSupply should increase by 300");
+
+        // Admin withdraws some principal for staking (V1 functionality)
+        vm.prank(admin);
+        vault.withdrawPrincipal(150e18, admin);
+
+        uint256 afterWithdrawDepositPrincipal = vault.depositPrincipal();
+        assertEq(afterWithdrawDepositPrincipal, afterDepositsDepositPrincipal - 150e18, "depositPrincipal should decrease by 150");
+
+        // Alice requests V2 withdrawal
+        vm.prank(alice);
+        vault.requestWithdraw(100e18);
+
+        // V2 withdrawal request should NOT affect depositPrincipal
+        assertEq(vault.depositPrincipal(), afterWithdrawDepositPrincipal, "depositPrincipal should not change on withdrawal request");
+        assertEq(vault.totalSupply(), afterDepositsTotalSupply - 100e18, "totalSupply should decrease by withdrawn shares");
+
+        // Process V2 withdrawal
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        uint256 fee = 5e18;
+        uint256 netAmount = 100e18 - fee;
+        wbera.mint(fulfiller, netAmount);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+        vault.fulfillBatch(1, fee);
+        vm.stopPrank();
+
+        // After fulfillment, any remainder from rounding should be added to depositPrincipal
+        // but the main accounting should remain intact
+        uint256 afterFulfillmentDepositPrincipal = vault.depositPrincipal();
+        assertTrue(afterFulfillmentDepositPrincipal >= afterWithdrawDepositPrincipal, "depositPrincipal should not decrease");
+        
+        // The difference should be small (just rounding remainder if any)
+        uint256 difference = afterFulfillmentDepositPrincipal - afterWithdrawDepositPrincipal;
+        assertTrue(difference <= 1e15, "Difference should be minimal (just rounding)"); // Allow up to 0.001 BERA difference
+
+        // Alice claims withdrawal
+        vm.prank(alice);
+        vault.claimWithdrawnAssets();
+
+        // Claiming should not affect depositPrincipal
+        assertEq(vault.depositPrincipal(), afterFulfillmentDepositPrincipal, "depositPrincipal should not change on claim");
+
+        // Bob should still be able to earn rewards and admin should still be able to withdraw principal
+        notifyAndWarp(address(wbera), 20e18);
+        assertApproxEqAbs(vault.previewRewards(bob, address(wbera)), 10e18, tolerance, "Bob should earn half");
+        assertApproxEqAbs(vault.previewRewards(alice, address(wbera)), 10e18, tolerance, "Alice should earn half");
+
+        // Admin should still be able to withdraw more principal
+        vm.prank(admin);
+        vault.withdrawPrincipal(50e18, admin);
+        assertEq(vault.depositPrincipal(), afterFulfillmentDepositPrincipal - 50e18, "Admin should still be able to withdraw principal");
+    }
+
+    function test_RequestWithdrawExceedsBalance() public {
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+
+        // Try to withdraw more than balance
+        vm.prank(alice);
+        vm.expectRevert(); // Should revert with ERC20InsufficientBalance or similar
+        vault.requestWithdraw(101e18);
+    }
+
+    function test_StartBatchAlreadyFrozen() public {
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+
+        vm.prank(alice);
+        vault.requestWithdraw(50e18);
+
+        // Start batch once
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Try to start again
+        vm.prank(fulfiller);
+        vm.expectRevert();
+        vault.startWithdrawalBatch();
+    }
+
+    function test_AbandonedBatch() public {
+        // Test scenario where batch is started but never fulfilled
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+
+        vm.prank(alice);
+        vault.requestWithdraw(50e18);
+
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Move to next batch without fulfilling first
+        vm.prank(alice);
+        vault.requestWithdraw(25e18);
+
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Alice should have shares in both batches
+        (,, uint256 batch1Total) = vault.batches(1);
+        (,, uint256 batch2Total) = vault.batches(2);
+        assertEq(batch1Total, 50e18, "Batch 1 should have 50 shares");
+        assertEq(batch2Total, 25e18, "Batch 2 should have 25 shares");
+        assertEq(vault.pending(alice), 75e18, "Alice should have 75 total pending");
+
+        // Fulfill only batch 2
+        wbera.mint(fulfiller, 25e18);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), 25e18);
+        vault.fulfillBatch(2, 0);
+        vm.stopPrank();
+
+        // Alice should be able to claim from batch 2
+        assertEq(vault.claimable(alice), 25e18, "Alice should have 25 claimable from batch 2");
+        assertEq(vault.pending(alice), 50e18, "Alice should still have 50 pending in batch 1");
+
+        vm.prank(alice);
+        vault.claimWithdrawnAssets();
+
+        // Batch 1 remains unfulfilled but can be fulfilled later
+        wbera.mint(fulfiller, 50e18);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), 50e18);
+        vault.fulfillBatch(1, 0);
+        vm.stopPrank();
+
+        assertEq(vault.claimable(alice), 50e18, "Alice should now have 50 claimable from batch 1");
+    }
+
+    function test_ZeroAmountEdgeCases() public {
+        // Test empty batch scenarios
+        vm.prank(fulfiller);
+        vm.expectRevert(fatBERAV2.BatchEmpty.selector);
+        vault.startWithdrawalBatch(); // Attempt to start empty batch
+
+        vm.prank(fulfiller);
+        vm.expectRevert(fatBERAV2.BatchNotFrozen.selector);
+        vault.fulfillBatch(1, 0); // Attempt to fulfill empty batch
+
+        // Now add some requests to batch 1
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+
+        vm.prank(alice);
+        vault.requestWithdraw(50e18);
+
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Fulfill batch 1 normally
+        wbera.mint(fulfiller, 50e18);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), 50e18);
+        vault.fulfillBatch(1, 0);
+        vm.stopPrank();
+
+        assertEq(vault.claimable(alice), 50e18, "Alice should have 50 claimable");
+    }
+
+    function test_RewardsAfterWithdrawalRequest() public {
+        // Test that users can still earn rewards after requesting withdrawal but before fulfillment
+        vm.prank(alice);
+        vault.deposit(200e18, alice);
+
+        vm.prank(bob);
+        vault.deposit(100e18, bob);
+
+        // Alice requests partial withdrawal
+        vm.prank(alice);
+        vault.requestWithdraw(100e18); // Alice now has 100 shares, 100 pending
+
+        // Add rewards - should be distributed based on current balances
+        notifyAndWarp(address(wbera), 30e18);
+
+        // Alice should get 100/200 = 50% of rewards (100 active shares out of 200 total)
+        // Bob should get 100/200 = 50% of rewards
+        assertApproxEqAbs(vault.previewRewards(alice, address(wbera)), 15e18, tolerance, "Alice should get 15 BERA rewards");
+        assertApproxEqAbs(vault.previewRewards(bob, address(wbera)), 15e18, tolerance, "Bob should get 15 BERA rewards");
+
+        // Process withdrawal
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        wbera.mint(fulfiller, 100e18);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), 100e18);
+        vault.fulfillBatch(1, 0);
+        vm.stopPrank();
+
+        // Alice claims withdrawal and rewards
+        vm.prank(alice);
+        vault.claimWithdrawnAssets();
+
+        vm.prank(alice);
+        vault.claimRewards(address(alice));
+
+        // Add more rewards after withdrawal - Alice should get proportionally less
+        notifyAndWarp(address(wbera), 30e18);
+
+        // Now Alice has 100 shares, Bob has 100 shares, so 50/50 split
+        assertApproxEqAbs(vault.previewRewards(alice, address(wbera)), 15e18, tolerance, "Alice should get 15 BERA from second reward");
+        assertApproxEqAbs(vault.previewRewards(bob, address(wbera)), 30e18, tolerance, "Bob should get 30 BERA 15 from first 15 from second reward");
+    }
+
+    function test_MaximumFeeScenario() public {
+        vm.prank(alice);
+        vault.deposit(1000e18, alice);
+
+        vm.prank(alice);
+        vault.requestWithdraw(1000e18);
+
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Test with very high fee (99% - extreme scenario)
+        uint256 fee = 990e18;
+        uint256 netAmount = 10e18;
+
+        wbera.mint(fulfiller, netAmount);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+        vault.fulfillBatch(1, fee);
+        vm.stopPrank();
+
+        assertEq(vault.claimable(alice), netAmount, "Alice should receive only 1% after extreme fee");
+
+        vm.prank(alice);
+        vault.claimWithdrawnAssets();
+
+        // Verify fee goes to increasing depositPrincipal for more staking
+        // The remainder calculation should handle this correctly
+    }
+
+    function test_RoundingEdgeCasesWithSmallAmounts() public {
+        // Test with very small amounts to check rounding behavior
+        vm.prank(alice);
+        vault.deposit(3, alice); // 3 wei
+
+        vm.prank(bob);
+        vault.deposit(7, bob); // 7 wei
+
+        vm.prank(charlie);
+        vault.deposit(5, charlie); // 5 wei
+
+        // All request withdrawal
+        vm.prank(alice);
+        vault.requestWithdraw(3);
+
+        vm.prank(bob);
+        vault.requestWithdraw(7);
+
+        vm.prank(charlie);
+        vault.requestWithdraw(5);
+
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        // Total: 15 wei, fee: 1 wei, net: 14 wei
+        uint256 fee = 1;
+        uint256 netAmount = 14;
+
+        wbera.mint(fulfiller, netAmount);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+
+        uint256 principalBefore = vault.depositPrincipal();
+        vault.fulfillBatch(1, fee);
+        uint256 principalAfter = vault.depositPrincipal();
+        vm.stopPrank();
+
+        // Check that rounding is handled correctly
+        uint256 aliceClaimable = vault.claimable(alice);
+        uint256 bobClaimable = vault.claimable(bob);
+        uint256 charlieClaimable = vault.claimable(charlie);
+
+        // Sum should not exceed netAmount
+        assertTrue(aliceClaimable + bobClaimable + charlieClaimable <= netAmount, "Total claimable should not exceed net amount");
+
+        // Any remainder should be added to principal
+        uint256 remainder = netAmount - (aliceClaimable + bobClaimable + charlieClaimable);
+        assertEq(principalAfter - principalBefore, remainder, "Remainder should be added to principal");
+    }
+
+    function test_MultiplePartialWithdrawals() public {
+        // Test user making multiple small withdrawal requests
+        vm.prank(alice);
+        vault.deposit(1000e18, alice);
+
+        // Alice makes 5 small withdrawal requests in same batch
+        vm.prank(alice);
+        vault.requestWithdraw(100e18);
+
+        vm.prank(alice);
+        vault.requestWithdraw(150e18);
+
+        vm.prank(alice);
+        vault.requestWithdraw(200e18);
+
+        vm.prank(alice);
+        vault.requestWithdraw(250e18);
+
+        vm.prank(alice);
+        vault.requestWithdraw(300e18);
+
+        // Check state
+        assertEq(vault.balanceOf(alice), 0, "Alice should have 0 shares left");
+        assertEq(vault.pending(alice), 1000e18, "Alice should have 1000 shares pending");
+
+        // Check batch structure
+        (,, uint256 batchTotal) = vault.batches(1);
+        assertEq(batchTotal, 1000e18, "Batch should have 1000 total shares");
+
+        // Process normally
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        wbera.mint(fulfiller, 1000e18);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), 1000e18);
+        vault.fulfillBatch(1, 0);
+        vm.stopPrank();
+
+        assertEq(vault.claimable(alice), 1000e18, "Alice should have 1000 claimable");
+
+        vm.prank(alice);
+        vault.claimWithdrawnAssets();
+
+        assertEq(vault.claimable(alice), 0, "Alice should have 0 claimable after claim");
+    }
+
+    function test_DepositAfterWithdrawalRequest() public {
+        // Test that user can deposit more after requesting withdrawal
+        vm.prank(alice);
+        vault.deposit(100e18, alice);
+
+        vm.prank(alice);
+        vault.requestWithdraw(50e18);
+
+        // Alice deposits more
+        vm.prank(alice);
+        vault.deposit(200e18, alice);
+
+        // Alice should have 250 active shares and 50 pending
+        assertEq(vault.balanceOf(alice), 250e18, "Alice should have 250 active shares");
+        assertEq(vault.pending(alice), 50e18, "Alice should have 50 pending shares");
+
+        // Alice can request more withdrawals
+        vm.prank(alice);
+        vault.requestWithdraw(100e18);
+
+        assertEq(vault.balanceOf(alice), 150e18, "Alice should have 150 active shares");
+        assertEq(vault.pending(alice), 150e18, "Alice should have 150 pending shares");
+
+        // Process batch
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+
+        wbera.mint(fulfiller, 150e18);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), 150e18);
+        vault.fulfillBatch(1, 0);
+        vm.stopPrank();
+
+        assertEq(vault.claimable(alice), 150e18, "Alice should have 150 claimable");
+        assertEq(vault.balanceOf(alice), 150e18, "Alice should still have 150 active shares");
+    }
+
+    function test_MassWithdrawalStressTest() public {
+        uint256 numUsers = 150; // Test with 150 users
+        address[] memory users = new address[](numUsers);
+        uint256[] memory userDeposits = new uint256[](numUsers);
+        uint256[] memory userWithdrawals = new uint256[](numUsers);
+        
+        console.log("Setting up %d users for mass withdrawal test", numUsers);
+        
+        uint256 totalDeposited = 0;
+        uint256 totalWithdrawRequested = 0;
+        
+        // Setup users with varying deposit amounts
+        for (uint256 i = 0; i < numUsers; i++) {
+            users[i] = makeAddr(string.concat("user", vm.toString(i)));
+            
+            // Vary deposit amounts: 1-10 BERA per user
+            userDeposits[i] = (i % 10 + 1) * 1e18;
+            totalDeposited += userDeposits[i];
+            
+            // Mint WBERA to each user
+            wbera.mint(users[i], userDeposits[i]);
+            
+            // Approve vault
+            vm.prank(users[i]);
+            wbera.approve(address(vault), userDeposits[i]);
+            
+            // Deposit
+            vm.prank(users[i]);
+            vault.deposit(userDeposits[i], users[i]);
+        }
+        
+        console.log("Total deposited: %d BERA", totalDeposited / 1e18);
+        assertEq(vault.totalSupply(), totalDeposited, "Total supply should match deposits");
+        
+        // Add some rewards before withdrawals
+        notifyAndWarp(address(wbera), 100e18);
+        
+        // All users request partial withdrawals (50-75% of their deposits)
+        for (uint256 i = 0; i < numUsers; i++) {
+            // Withdraw between 50-75% of deposit
+            userWithdrawals[i] = (userDeposits[i] * (50 + (i % 26))) / 100;
+            totalWithdrawRequested += userWithdrawals[i];
+            
+            vm.prank(users[i]);
+            vault.requestWithdraw(userWithdrawals[i]);
+        }
+        
+        console.log("Total withdrawal requested: %d BERA", totalWithdrawRequested / 1e18);
+        
+        // Verify batch state
+        (,, uint256 batchTotal) = vault.batches(1);
+        assertEq(batchTotal, totalWithdrawRequested, "Batch total should match requested withdrawals");
+        assertEq(vault.totalPending(), totalWithdrawRequested, "Total pending should match requests");
+        
+        // Verify individual pending amounts
+        for (uint256 i = 0; i < numUsers; i++) {
+            assertEq(vault.pending(users[i]), userWithdrawals[i], "Individual pending amount incorrect");
+            assertEq(vault.balanceOf(users[i]), userDeposits[i] - userWithdrawals[i], "Remaining balance incorrect");
+        }
+        
+        // Start withdrawal batch
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+        
+        // Verify batch is frozen and new batch started
+        (bool frozen1, bool fulfilled1,) = vault.batches(1);
+        (bool frozen2, bool fulfilled2,) = vault.batches(2);
+        assertTrue(frozen1, "Batch 1 should be frozen");
+        assertFalse(fulfilled1, "Batch 1 should not be fulfilled yet");
+        assertFalse(frozen2, "Batch 2 should not be frozen");
+        assertFalse(fulfilled2, "Batch 2 should not be fulfilled");
+        assertEq(vault.currentBatchId(), 2, "Current batch ID should be 2");
+        
+        // Test that users can still request withdrawals in new batch
+        vm.prank(users[0]);
+        vault.requestWithdraw(userDeposits[0] - userWithdrawals[0]); // Withdraw remaining
+        
+        (,, uint256 batch2Total) = vault.batches(2);
+        assertEq(batch2Total, userDeposits[0] - userWithdrawals[0], "New batch should have the additional withdrawal");
+        
+        // Fulfill first batch with 2% fee
+        uint256 fee = totalWithdrawRequested * 2 / 100; // 2% validator fee
+        uint256 netAmount = totalWithdrawRequested - fee;
+        
+        console.log("Fulfilling batch with fee: %d BERA, net: %d BERA", fee / 1e18, netAmount / 1e18);
+        
+        wbera.mint(fulfiller, netAmount);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+        vault.fulfillBatch(1, fee);
+        vm.stopPrank();
+        
+        // Verify batch is now fulfilled
+        (bool frozen1After, bool fulfilled1After,) = vault.batches(1);
+        assertTrue(frozen1After, "Batch 1 should still be frozen");
+        assertTrue(fulfilled1After, "Batch 1 should now be fulfilled");
+        
+        // Verify totalPending decreased
+        assertEq(vault.totalPending(), userDeposits[0] - userWithdrawals[0], "Total pending should only include batch 2");
+        
+        // Calculate and verify claimable amounts for each user
+        uint256 totalClaimable = 0;
+        for (uint256 i = 0; i < numUsers; i++) {
+            uint256 expectedClaimable = FixedPointMathLib.fullMulDiv(userWithdrawals[i], netAmount, totalWithdrawRequested);
+            uint256 actualClaimable = vault.claimable(users[i]);
+            
+            assertApproxEqAbs(actualClaimable, expectedClaimable, 1, "Claimable amount incorrect for user");
+            totalClaimable += actualClaimable;
+            
+            // Verify pending is cleared for batch 1, except user[0] who has pending in batch 2
+            if (i == 0) {
+                assertEq(vault.pending(users[i]), userDeposits[0] - userWithdrawals[0], "User 0 should have batch 2 pending");
+            } else {
+                assertEq(vault.pending(users[i]), 0, "Other users should have 0 pending after batch 1 fulfill");
+            }
+        }
+        
+        // Total claimable should not exceed net amount (due to rounding down)
+        assertLe(totalClaimable, netAmount, "Total claimable should not exceed net amount");
+        
+        // Any remainder should be added to depositPrincipal
+        uint256 remainder = netAmount - totalClaimable;
+        console.log("Rounding remainder: %d wei", remainder);
+        
+        // Test mass claiming
+        uint256 totalClaimed = 0;
+        for (uint256 i = 0; i < numUsers; i++) {
+            uint256 claimableBefore = vault.claimable(users[i]);
+            if (claimableBefore > 0) {
+                uint256 balanceBefore = wbera.balanceOf(users[i]);
+                
+                vm.prank(users[i]);
+                vault.claimWithdrawnAssets();
+                
+                uint256 balanceAfter = wbera.balanceOf(users[i]);
+                uint256 claimed = balanceAfter - balanceBefore;
+                
+                assertEq(claimed, claimableBefore, "Claimed amount should match claimable");
+                assertEq(vault.claimable(users[i]), 0, "Claimable should be 0 after claim");
+                
+                totalClaimed += claimed;
+            }
+        }
+        
+        assertEq(totalClaimed, totalClaimable, "Total claimed should match total claimable");
+        
+        console.log("Mass withdrawal test completed successfully!");
+        console.log("- %d users processed", numUsers);
+        console.log("- %d BERA total deposited", totalDeposited / 1e18);
+        console.log("- %d BERA total withdrawn", totalWithdrawRequested / 1e18);
+        console.log("- %d BERA fee applied", fee / 1e18);
+        console.log("- %d BERA net distributed", totalClaimed / 1e18);
+        console.log("- %d wei rounding remainder", remainder);
+    }
+
+    function test_ParallelBatchProcessing() public {
+        uint256 numUsersPerBatch = 50;
+        address[] memory batch1Users = new address[](numUsersPerBatch);
+        address[] memory batch2Users = new address[](numUsersPerBatch);
+        
+        uint256 depositAmount = 10e18;
+        uint256 withdrawAmount = 8e18;
+        
+        // Setup batch 1 users
+        for (uint256 i = 0; i < numUsersPerBatch; i++) {
+            batch1Users[i] = makeAddr(string.concat("batch1user", vm.toString(i)));
+            wbera.mint(batch1Users[i], depositAmount);
+            
+            vm.prank(batch1Users[i]);
+            wbera.approve(address(vault), depositAmount);
+            
+            vm.prank(batch1Users[i]);
+            vault.deposit(depositAmount, batch1Users[i]);
+            
+            vm.prank(batch1Users[i]);
+            vault.requestWithdraw(withdrawAmount);
+        }
+        
+        // Start first batch
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+        
+        // Setup batch 2 users
+        for (uint256 i = 0; i < numUsersPerBatch; i++) {
+            batch2Users[i] = makeAddr(string.concat("batch2user", vm.toString(i)));
+            wbera.mint(batch2Users[i], depositAmount);
+            
+            vm.prank(batch2Users[i]);
+            wbera.approve(address(vault), depositAmount);
+            
+            vm.prank(batch2Users[i]);
+            vault.deposit(depositAmount, batch2Users[i]);
+            
+            vm.prank(batch2Users[i]);
+            vault.requestWithdraw(withdrawAmount);
+        }
+        
+        // Start second batch
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+        
+        // Verify batch states
+        assertEq(vault.currentBatchId(), 3, "Should be on batch 3");
+        
+        (,, uint256 batch1Total) = vault.batches(1);
+        (,, uint256 batch2Total) = vault.batches(2);
+        
+        assertEq(batch1Total, numUsersPerBatch * withdrawAmount, "Batch 1 total incorrect");
+        assertEq(batch2Total, numUsersPerBatch * withdrawAmount, "Batch 2 total incorrect");
+        
+        // Fulfill both batches (batch 2 first to test order independence)
+        uint256 netAmount = numUsersPerBatch * withdrawAmount;
+        
+        // Fulfill batch 2
+        wbera.mint(fulfiller, netAmount);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+        vault.fulfillBatch(2, 0);
+        vm.stopPrank();
+        
+        // Fulfill batch 1
+        wbera.mint(fulfiller, netAmount);
+        vm.startPrank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+        vault.fulfillBatch(1, 0);
+        vm.stopPrank();
+        
+        // Verify all users can claim from both batches
+        for (uint256 i = 0; i < numUsersPerBatch; i++) {
+            assertEq(vault.claimable(batch1Users[i]), withdrawAmount, "Batch 1 user claimable incorrect");
+            assertEq(vault.claimable(batch2Users[i]), withdrawAmount, "Batch 2 user claimable incorrect");
+            
+            // Test claiming
+            vm.prank(batch1Users[i]);
+            vault.claimWithdrawnAssets();
+            
+            vm.prank(batch2Users[i]);
+            vault.claimWithdrawnAssets();
+            
+            assertEq(vault.claimable(batch1Users[i]), 0, "Batch 1 user should have 0 claimable after claim");
+            assertEq(vault.claimable(batch2Users[i]), 0, "Batch 2 user should have 0 claimable after claim");
+        }
+        
+        console.log("Parallel batch processing test completed successfully!");
     }
 }
 
