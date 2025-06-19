@@ -19,6 +19,7 @@ interface IWETH is IERC20 {
     function withdraw(uint256 amount) external;
 }
 
+/// @custom:oz-upgrades-from fatBERA
 contract fatBERAV2 is
     ERC4626Upgradeable,
     PausableUpgradeable,
@@ -105,10 +106,11 @@ contract fatBERAV2 is
         bool fulfilled;
         uint256 total;
     }
+
     mapping(uint256 => Batch) public batches;
     uint256 public currentBatchId;
 
-    mapping(address => uint256) public pending;    // shares queued
+    mapping(address => uint256) public pending; // shares queued
     mapping(address => uint256) public claimable; // shares ready to pull
     uint256 public totalPending;
 
@@ -158,6 +160,7 @@ contract fatBERAV2 is
      * @notice Reinitializer for V2: sets up batch counter and the withdraw fulfiller role.
      * @param withdrawFulfiller The multisig address that will call fulfillBatch.
      * @dev Use `reinitializer(2)` so this runs exactly once, after the original initializer.
+     * @custom:oz-upgrades-validate-as-initializer
      */
     function initializeV2(address withdrawFulfiller) external reinitializer(2) {
         require(withdrawFulfiller != address(0), "Invalid fulfiller");
@@ -427,6 +430,7 @@ contract fatBERAV2 is
      * @param receiver The address receiving the claimed rewards.
      * @dev Updates rewards prior to claiming and resets the user's reward balance.
      */
+
     function claimRewards(address token, address receiver) public nonReentrant {
         _updateRewards(msg.sender, token);
 
@@ -455,29 +459,31 @@ contract fatBERAV2 is
     /**
      * @notice ERC-4626 exit is disabled; always returns 0 shares.
      */
-    function withdraw(
-        uint256 /*assets*/,
-        address /*receiver*/,
-        address /*owner*/
-    ) public pure override returns (uint256) {
+    function withdraw(uint256, /*assets*/ address, /*receiver*/ address /*owner*/ )
+        public
+        pure
+        override
+        returns (uint256)
+    {
         return 0;
     }
 
     /**
      * @notice ERC-4626 exit is disabled; always returns 0 assets.
      */
-    function redeem(
-        uint256 /*shares*/,
-        address /*receiver*/,
-        address /*owner*/
-    ) public pure override returns (uint256) {
+    function redeem(uint256, /*shares*/ address, /*receiver*/ address /*owner*/ )
+        public
+        pure
+        override
+        returns (uint256)
+    {
         return 0;
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          VIEW LOGIC                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-    
+
     /**
      * @notice Simulates the effects of withdrawing assets at the current block.
      * @return Returns 0 if paused, otherwise returns the standard ERC4626 preview calculation.
@@ -617,7 +623,7 @@ contract fatBERAV2 is
      * @notice Queue yourself into the *current* unstake batch.
      *         Burns your shares and settles rewards.
      */
-    function requestWithdraw(uint256 shares) external nonReentrant whenNotPaused {
+    function requestWithdraw(uint256 shares) external nonReentrant {
         if (shares == 0) revert ZeroShares();
         _updateRewards(msg.sender);
 
@@ -628,10 +634,10 @@ contract fatBERAV2 is
 
         b.users.push(msg.sender);
         b.amounts.push(shares);
-        b.total        += shares;
+        b.total += shares;
 
         pending[msg.sender] += shares;
-        totalPending       += shares;
+        totalPending += shares;
 
         emit WithdrawalRequested(msg.sender, currentBatchId, shares);
     }
@@ -639,7 +645,7 @@ contract fatBERAV2 is
     /**
      * @notice Admin closes the current batch and emits the total to unstake.
      */
-    function startWithdrawalBatch() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function startWithdrawalBatch() external onlyRole(WITHDRAW_FULFILLER_ROLE) {
         Batch storage b = batches[currentBatchId];
         if (b.frozen) revert BatchAlreadyFrozen();
 
@@ -654,13 +660,9 @@ contract fatBERAV2 is
      * @param batchId The frozen batch identifier.
      * @param fee The validator withdrawal fee in WBERA.
      */
-    function fulfillBatch(uint256 batchId, uint256 fee)
-        external
-        nonReentrant
-        onlyRole(WITHDRAW_FULFILLER_ROLE)
-    {
+    function fulfillBatch(uint256 batchId, uint256 fee) external nonReentrant onlyRole(WITHDRAW_FULFILLER_ROLE) {
         Batch storage b = batches[batchId];
-        if (!b.frozen)    revert BatchNotFrozen();
+        if (!b.frozen) revert BatchNotFrozen();
         if (b.fulfilled) revert BatchAlreadyFulfilled();
 
         uint256 totalShares = b.total;
@@ -669,8 +671,8 @@ contract fatBERAV2 is
 
         uint256 net = totalShares - fee;
 
-        b.fulfilled   = true;
-        totalPending  -= totalShares;
+        b.fulfilled = true;
+        totalPending -= totalShares;
 
         uint256 sumClaimed;
         for (uint256 i = 0; i < b.users.length; i++) {
@@ -679,9 +681,9 @@ contract fatBERAV2 is
 
             uint256 userAmount = FixedPointMathLib.fullMulDiv(a, net, totalShares);
 
-            pending[u]   -= a;
+            pending[u] -= a;
             claimable[u] += userAmount;
-            sumClaimed   += userAmount;
+            sumClaimed += userAmount;
 
             emit WithdrawalFulfilled(u, batchId, userAmount);
         }
