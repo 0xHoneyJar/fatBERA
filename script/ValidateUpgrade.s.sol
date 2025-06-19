@@ -50,7 +50,7 @@ contract ValidateUpgrade is Script {
      * @notice Alternative validation method that provides more detailed output
      * @dev This can be used if you want to validate specific aspects
      */
-    function validateWithDetails() external view {
+    function validateWithDetails() external pure {
         console.log("=== Detailed Validation Report ===");
         console.log("");
         
