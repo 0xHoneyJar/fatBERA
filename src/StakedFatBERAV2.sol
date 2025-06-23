@@ -98,11 +98,13 @@ contract StakedFatBERAV2 is
             _spendAllowance(owner, caller, shares);
         }
 
+        // trasury can exit for no fee
+        uint256 feeToUse = caller == treasury ? 0 : exitFee;
         // exit fees on the shares
-        uint256 exitFeeInShares = FPML.mulDiv(shares, exitFee, 10000);
+        uint256 exitFeeInShares = FPML.mulDiv(shares, feeToUse, 10000);
         uint256 finalShares = shares - exitFeeInShares;
         // update assets by the same proportion
-        uint256 finalAssets = assets - FPML.mulDiv(assets, exitFee, 10000);
+        uint256 finalAssets = assets - FPML.mulDiv(assets, feeToUse, 10000);
 
         _transfer(owner, treasury, exitFeeInShares);
         _burn(owner, finalShares);
