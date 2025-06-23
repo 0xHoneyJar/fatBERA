@@ -6,27 +6,30 @@ import {StdCheats} from "forge-std/StdCheats.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {StakedFatBERA} from "../src/StakedFatBERA.sol";
+import {StakedFatBERAV2} from "../src/StakedFatBERAV2.sol";
 import {fatBERA as FatBERA} from "../src/fatBERA.sol";
 
 contract stFatBERATest is Test {
-    StakedFatBERA   public stFatBERA;
-    FatBERA         public fatBERA      = FatBERA(0xBAE11292A3E693aF73651BDa350D752AE4A391D4);
-    IERC20          public wbera        = IERC20(0x6969696969696969696969696969696969696969);
-    address         public fbnotifier   = 0x73e34207C4d35e6c7Bf7D23B8ADD6975aa8049B7;
+    StakedFatBERAV2     public stFatBERA;
+    FatBERA             public fatBERA      = FatBERA(0xBAE11292A3E693aF73651BDa350D752AE4A391D4);
+    IERC20              public wbera        = IERC20(0x6969696969696969696969696969696969696969);
+    address             public fbnotifier   = 0x73e34207C4d35e6c7Bf7D23B8ADD6975aa8049B7;
 
     // ------------------------------------------------------------------------
     address owner       = makeAddr("owner");
     address user        = makeAddr("user");
     address operator    = makeAddr("operator");
+    address treasury    = makeAddr("treasury");
     // ------------------------------------------------------------------------
     function setUp() public {
         vm.createSelectFork("https://rpc.berachain.com", 4048939);
 
         vm.startPrank(owner);
-        bytes memory initData = abi.encodeWithSelector(StakedFatBERA.initialize.selector, owner, address(fatBERA));
-        stFatBERA = StakedFatBERA(Upgrades.deployUUPSProxy("StakedFatBERA.sol:StakedFatBERA", initData));
+        bytes memory initData = abi.encodeWithSelector(StakedFatBERAV2.initialize.selector, owner, address(fatBERA));
+        stFatBERA = StakedFatBERAV2(Upgrades.deployUUPSProxy("StakedFatBERAV2.sol:StakedFatBERAV2", initData));
         stFatBERA.grantRole(stFatBERA.OPERATOR_ROLE(), operator);
+        stFatBERA.setTreasury(treasury);
+        stFatBERA.setExitFee(50); // 0.5%
         vm.stopPrank();
 
         vm.label(address(stFatBERA), "stFatBERA");
@@ -34,6 +37,8 @@ contract stFatBERATest is Test {
         vm.label(address(wbera), "wbera");
         vm.label(owner, "owner");
         vm.label(user, "user");
+        vm.label(treasury, "treasury");
+        vm.label(operator, "operator");
 
         // already credit wbera to user
         StdCheats.deal(address(wbera), user, 100 ether);
@@ -46,6 +51,7 @@ contract stFatBERATest is Test {
 
     function test_depositShouldResultInOneToOne() public {
         uint256 AMOUNT_TO_DEPOSIT = 100 ether;
+        uint256 AMOUNT_WITH_FEE = 99.5 ether;
         vm.startPrank(user);
 
         // first deposit into fatBERA
@@ -59,7 +65,7 @@ contract stFatBERATest is Test {
         vm.stopPrank();
 
         assertEq(stFatBERA.balanceOf(user), AMOUNT_TO_DEPOSIT);
-        assertEq(stFatBERA.previewRedeem(minted), AMOUNT_TO_DEPOSIT);
+        assertEq(stFatBERA.previewRedeem(minted), AMOUNT_WITH_FEE);
     }
 
     function test_compoundingSingleUser() public {

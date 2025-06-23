@@ -15,6 +15,7 @@ ffi = true
 ast = true
 build_info = true
 extra_output = ["storageLayout"]
+fs_permissions = [{ access = "read", path = "./" }]
 
 [rpc_endpoints]
 bArtio = "https://bartio.rpc.berachain.com/"
