@@ -52,6 +52,8 @@ contract fatBERAV2 is
     error InsufficientAssets();
     error NothingToClaim();
     error BatchEmpty();
+    error ExceedsMaxUsersPerBatch();
+    error InvalidBatchSize();
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STRUCTS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -115,6 +117,8 @@ contract fatBERAV2 is
     mapping(address => uint256) public claimable; // shares ready to pull
     uint256 public totalPending;
 
+    uint256 public maxUsersPerBatch;
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          CONSTRUCTOR                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -166,6 +170,7 @@ contract fatBERAV2 is
     function initializeV2(address withdrawFulfiller) external reinitializer(2) {
         require(withdrawFulfiller != address(0), "Invalid fulfiller");
         currentBatchId = 1;
+        maxUsersPerBatch = 100; // Default to 100 users per batch
         _grantRole(WITHDRAW_FULFILLER_ROLE, withdrawFulfiller);
     }
 
@@ -224,6 +229,16 @@ contract fatBERAV2 is
      */
     function setMaxDeposits(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         maxDeposits = newMax < depositPrincipal ? depositPrincipal : newMax;
+    }
+
+    /**
+     * @notice Sets the maximum number of users allowed per withdrawal batch.
+     * @param newMax The new maximum users per batch.
+     * @dev Only callable by admin. Must be greater than 0.
+     */
+    function setMaxUsersPerBatch(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newMax == 0) revert InvalidBatchSize();
+        maxUsersPerBatch = newMax;
     }
 
     /**
@@ -627,15 +642,22 @@ contract fatBERAV2 is
     function requestWithdraw(uint256 shares) external nonReentrant {
         if (shares == 0) revert ZeroShares();
 
-        Batch storage b = batches[currentBatchId];
-        if (b.frozen) revert BatchFrozen(); // Might not need this since freezing a batch just increments the currentBatchId
+        Batch storage currentBatch = batches[currentBatchId];
+        
+        // If current batch is frozen, we can't add to it
+        if (currentBatch.frozen) revert BatchFrozen();
+        
+        // If adding this user would exceed the limit, reject the request
+        if (currentBatch.users.length >= maxUsersPerBatch) {
+            revert ExceedsMaxUsersPerBatch();
+        }
 
         _updateRewards(msg.sender);
         _burn(msg.sender, shares);
         
-        b.users.push(msg.sender);
-        b.amounts.push(shares);
-        b.total += shares;
+        currentBatch.users.push(msg.sender);
+        currentBatch.amounts.push(shares);
+        currentBatch.total += shares;
 
         pending[msg.sender] += shares;
         totalPending += shares;

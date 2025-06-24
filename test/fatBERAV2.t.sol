@@ -2442,6 +2442,10 @@ contract fatBERATest is Test {
     }
 
     function test_MassWithdrawalStressTest() public {
+        vm.startPrank(admin);
+        vault.setMaxUsersPerBatch(151);
+        vm.stopPrank();
+
         uint256 numUsers = 150; // Test with 150 users
         address[] memory users = new address[](numUsers);
         uint256[] memory userDeposits = new uint256[](numUsers);
@@ -2685,6 +2689,236 @@ contract fatBERATest is Test {
         }
         
         console.log("Parallel batch processing test completed successfully!");
+    }
+
+    function test_GasUsage_FulfillBatch100Users() public {
+        uint256 numUsers = 100;
+        uint256 depositAmount = 10e18;
+        uint256 withdrawAmount = 8e18;
+        
+        console2.log("\n=== GAS USAGE TEST: fulfillBatch with %d users ===", numUsers);
+        
+        // Setup users and deposits
+        address[] memory users = new address[](numUsers);
+        for (uint256 i = 0; i < numUsers; i++) {
+            users[i] = makeAddr(string.concat("gasTestUser", vm.toString(i)));
+            wbera.mint(users[i], depositAmount);
+            
+            vm.prank(users[i]);
+            wbera.approve(address(vault), depositAmount);
+            
+            vm.prank(users[i]);
+            vault.deposit(depositAmount, users[i]);
+            
+            vm.prank(users[i]);
+            vault.requestWithdraw(withdrawAmount);
+        }
+        
+        // Start batch
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+        
+        // Setup for fulfillment
+        uint256 totalWithdrawAmount = numUsers * withdrawAmount;
+        uint256 fee = totalWithdrawAmount * 2 / 100; // 2% fee
+        uint256 netAmount = totalWithdrawAmount - fee;
+        
+        wbera.mint(fulfiller, netAmount);
+        vm.prank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+        
+        // Measure gas usage
+        vm.prank(fulfiller);
+        uint256 gasStart = gasleft();
+        vault.fulfillBatch(1, fee);
+        uint256 gasUsed = gasStart - gasleft();
+        
+        // Log results
+        console2.log("Gas used for fulfillBatch with %d users: %d", numUsers, gasUsed);
+        console2.log("Gas per user: %d", gasUsed / numUsers);
+        
+        // Compare to typical blockchain gas limits
+        uint256 berachainBlockGasLimit = 30_000_000; // ~30M gas typical for Berachain
+        
+        console2.log("Berachain block gas limit: %d", berachainBlockGasLimit);
+        console2.log("Gas usage as %% of block limit: %d%%", (gasUsed * 100) / berachainBlockGasLimit);
+        
+        // Test different batch sizes to find optimal limit
+        uint256[] memory testSizes = new uint256[](5);
+        testSizes[0] = 50;
+        testSizes[1] = 75;
+        testSizes[2] = 100;
+        testSizes[3] = 150;
+        testSizes[4] = 200;
+        
+        console2.log("\n--- Gas usage projection for different batch sizes ---");
+        for (uint256 i = 0; i < testSizes.length; i++) {
+            uint256 projectedGas = (gasUsed * testSizes[i]) / numUsers;
+            uint256 percentOfBlock = (projectedGas * 100) / berachainBlockGasLimit;
+            console2.log("Users: %d, Projected gas: %d (%d%% of block limit)", 
+                testSizes[i], projectedGas, percentOfBlock);
+        }
+        
+        // Safety assertions
+        assertTrue(gasUsed < berachainBlockGasLimit / 2, "Gas usage should be less than 50% of block limit");
+        assertTrue(gasUsed < 15_000_000, "Gas usage should be less than 15M gas for 100 users");
+        
+        console2.log("\nGas usage test completed - fulfillBatch is safe for %d users", numUsers);
+        
+        // Verify functionality still works
+        for (uint256 i = 0; i < 10; i++) { // Test first 10 users for functionality
+            uint256 expectedClaimable = FixedPointMathLib.fullMulDiv(withdrawAmount, netAmount, totalWithdrawAmount);
+            assertApproxEqAbs(vault.claimable(users[i]), expectedClaimable, 1, "Claimable amount should be correct");
+        }
+    }
+
+    function test_GasUsage_MaxUsersBatch() public {
+        // Test the current maxUsersPerBatch limit to ensure it's safe
+        uint256 maxUsers = vault.maxUsersPerBatch();
+        console2.log("\n=== GAS USAGE TEST: fulfillBatch with maxUsersPerBatch (%d users) ===", maxUsers);
+        
+        uint256 depositAmount = 5e18;
+        uint256 withdrawAmount = 4e18;
+        
+        // Setup users
+        for (uint256 i = 0; i < maxUsers; i++) {
+            address user = makeAddr(string.concat("maxTestUser", vm.toString(i)));
+            wbera.mint(user, depositAmount);
+            
+            vm.prank(user);
+            wbera.approve(address(vault), depositAmount);
+            
+            vm.prank(user);
+            vault.deposit(depositAmount, user);
+            
+            vm.prank(user);
+            vault.requestWithdraw(withdrawAmount);
+        }
+        
+        // Start batch
+        vm.prank(fulfiller);
+        vault.startWithdrawalBatch();
+        
+        // Setup for fulfillment
+        uint256 totalWithdrawAmount = maxUsers * withdrawAmount;
+        uint256 fee = totalWithdrawAmount * 3 / 100; // 3% fee
+        uint256 netAmount = totalWithdrawAmount - fee;
+        
+        wbera.mint(fulfiller, netAmount);
+        vm.prank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+        
+        // Measure gas
+        vm.prank(fulfiller);
+        uint256 gasStart = gasleft();
+        vault.fulfillBatch(1, fee);
+        uint256 gasUsed = gasStart - gasleft();
+        
+        console2.log("Gas used for fulfillBatch with maxUsersPerBatch (%d): %d", maxUsers, gasUsed);
+        console2.log("Gas per user: %d", gasUsed / maxUsers);
+        
+        uint256 berachainBlockGasLimit = 30_000_000;
+        uint256 percentOfBlock = (gasUsed * 100) / berachainBlockGasLimit;
+        console2.log("Gas usage as %% of Berachain block limit: %d%%", percentOfBlock);
+        
+        // Safety check - should use less than 30% of block gas limit
+        assertTrue(gasUsed < berachainBlockGasLimit * 30 / 100, 
+            "fulfillBatch should use less than 30% of block gas limit");
+        
+        console2.log("maxUsersPerBatch (%d) is safe for gas usage", maxUsers);
+    }
+
+    function test_BatchSizeRecommendation() public {
+        console2.log("\n=== BATCH SIZE RECOMMENDATION TEST ===");
+        vm.startPrank(admin);
+        vault.setMaxUsersPerBatch(151);
+        vm.stopPrank();
+        
+        // Test different batch sizes for gas optimization
+        uint256[] memory batchSizes = new uint256[](4);
+        batchSizes[0] = 50;
+        batchSizes[1] = 100;
+        batchSizes[2] = 150;
+        batchSizes[3] = vault.maxUsersPerBatch(); // Current max
+        
+        uint256 depositAmount = 5e18;
+        uint256 withdrawAmount = 4e18;
+        uint256 berachainBlockGasLimit = 30_000_000;
+        
+        console2.log("Testing batch sizes for gas optimization...");
+        console2.log("Target: <20% of block gas limit for safety margin");
+        console2.log("Berachain block gas limit:");
+        console2.log(berachainBlockGasLimit);
+        
+        for (uint256 j = 0; j < batchSizes.length; j++) {
+            uint256 batchSize = batchSizes[j];
+            
+            console2.log("--- Testing batch size (users):");
+            console2.log(batchSize);
+            
+            // Setup users for this batch size
+            for (uint256 i = 0; i < batchSize; i++) {
+                address user = address(uint160(0x2000 + j * 1000 + i)); // Unique addresses per test
+                wbera.mint(user, depositAmount);
+                
+                vm.prank(user);
+                wbera.approve(address(vault), depositAmount);
+                
+                vm.prank(user);
+                vault.deposit(depositAmount, user);
+                
+                vm.prank(user);
+                vault.requestWithdraw(withdrawAmount);
+            }
+            
+            // Start batch
+            vm.prank(fulfiller);
+            (uint256 batchId,) = vault.startWithdrawalBatch();
+            
+            // Setup for fulfillment
+            uint256 totalWithdrawAmount = batchSize * withdrawAmount;
+            uint256 fee = totalWithdrawAmount * 2 / 100;
+            uint256 netAmount = totalWithdrawAmount - fee;
+            
+            wbera.mint(fulfiller, netAmount);
+            vm.prank(fulfiller);
+            wbera.approve(address(vault), netAmount);
+            
+            // Measure gas usage
+            uint256 gasStart = gasleft();
+            vm.prank(fulfiller);
+            vault.fulfillBatch(batchId, fee);
+            uint256 gasUsed = gasStart - gasleft();
+            
+            // Calculate percentage of block gas limit
+            uint256 percentOfBlock = (gasUsed * 100) / berachainBlockGasLimit;
+            uint256 gasPerUser = gasUsed / batchSize;
+            
+            console2.log("Batch size:");
+            console2.log(batchSize);
+            console2.log("Gas used:");
+            console2.log(gasUsed);
+            console2.log("Gas per user:");
+            console2.log(gasPerUser);
+            console2.log("Block usage (%):");
+            console2.log(percentOfBlock);
+            
+            // Safety assertions
+            assertTrue(percentOfBlock < 50, "Gas usage too high - over 50% of block limit");
+            
+            if (percentOfBlock <= 20) {
+                console2.log("SAFE - Under 20% block limit");
+            } else if (percentOfBlock <= 30) {
+                console2.log("CAUTION - 20-30% block limit");
+            } else {
+                console2.log("HIGH - Over 30% block limit");
+            }
+        }
+        
+        console2.log("=== RECOMMENDATIONS ===");
+        console2.log("Current maxUsersPerBatch:");
+        console2.log(vault.maxUsersPerBatch());
+        console2.log("Recommendation: Use largest batch size that stays under 20% of block gas limit");
     }
 }
 

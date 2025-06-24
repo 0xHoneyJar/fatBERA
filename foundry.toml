@@ -2,6 +2,7 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+via_ir = true
 cache_path = 'cache'
 
 solc = "0.8.23"
