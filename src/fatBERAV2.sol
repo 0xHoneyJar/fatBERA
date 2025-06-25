@@ -54,6 +54,8 @@ contract fatBERAV2 is
     error BatchEmpty();
     error ExceedsMaxUsersPerBatch();
     error InvalidBatchSize();
+    error BelowMinimumWithdraw();
+    error ZeroWithdrawAmount();
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STRUCTS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -118,6 +120,7 @@ contract fatBERAV2 is
     uint256 public totalPending;
 
     uint256 public maxUsersPerBatch;
+    uint256 public minWithdrawAmount;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          CONSTRUCTOR                       */
@@ -171,6 +174,7 @@ contract fatBERAV2 is
         require(withdrawFulfiller != address(0), "Invalid fulfiller");
         currentBatchId = 1;
         maxUsersPerBatch = 100; // Default to 100 users per batch
+        minWithdrawAmount = 0.01 ether; // Minimum 0.01 WBERA to prevent griefing
         _grantRole(WITHDRAW_FULFILLER_ROLE, withdrawFulfiller);
     }
 
@@ -239,6 +243,16 @@ contract fatBERAV2 is
     function setMaxUsersPerBatch(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newMax == 0) revert InvalidBatchSize();
         maxUsersPerBatch = newMax;
+    }
+
+    /**
+     * @notice Sets the minimum withdrawal amount to prevent griefing.
+     * @param newMin The new minimum withdrawal amount.
+     * @dev Only callable by admin.
+     */
+    function setMinWithdrawAmount(uint256 newMin) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newMin == 0) revert ZeroWithdrawAmount();
+        minWithdrawAmount = newMin;
     }
 
     /**
@@ -640,14 +654,11 @@ contract fatBERAV2 is
      *         Burns your shares and settles rewards.
      */
     function requestWithdraw(uint256 shares) external nonReentrant {
-        if (shares == 0) revert ZeroShares();
+        if (shares < minWithdrawAmount) revert BelowMinimumWithdraw();
 
         Batch storage currentBatch = batches[currentBatchId];
 
-        // If current batch is frozen, we can't add to it
         if (currentBatch.frozen) revert BatchFrozen();
-
-        // If adding this user would exceed the limit, reject the request
         if (currentBatch.users.length >= maxUsersPerBatch) {
             revert ExceedsMaxUsersPerBatch();
         }
