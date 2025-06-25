@@ -18,12 +18,9 @@ interface ISafe {
     /// @param value Ether value of module transaction.
     /// @param data Data payload of module transaction.
     /// @param operation Operation type of module transaction.
-    function execTransactionFromModule(
-        address to,
-        uint256 value,
-        bytes memory data,
-        Enum.Operation operation
-    ) external returns (bool success);
+    function execTransactionFromModule(address to, uint256 value, bytes memory data, Enum.Operation operation)
+        external
+        returns (bool success);
 }
 
 interface IFatBERAV2 {
@@ -32,13 +29,10 @@ interface IFatBERAV2 {
     function WITHDRAW_FULFILLER_ROLE() external view returns (bytes32);
     function hasRole(bytes32 role, address account) external view returns (bool);
     function currentBatchId() external view returns (uint256);
-    function batches(uint256 batchId) external view returns (
-        address[] memory users,
-        uint256[] memory amounts,
-        bool frozen,
-        bool fulfilled,
-        uint256 total
-    );
+    function batches(uint256 batchId)
+        external
+        view
+        returns (address[] memory users, uint256[] memory amounts, bool frozen, bool fulfilled, uint256 total);
 }
 
 /**
@@ -70,10 +64,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     event WithdrawalBatchStarted(
-        address indexed safe,
-        address indexed initiator,
-        uint256 indexed batchId,
-        uint256 totalAmount
+        address indexed safe, address indexed initiator, uint256 indexed batchId, uint256 totalAmount
     );
 
     event ValidatorWithdrawalRequested(
@@ -84,12 +75,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         uint256 fee
     );
 
-    event BatchFulfilled(
-        address indexed safe,
-        address indexed initiator,
-        uint256 indexed batchId,
-        uint256 fee
-    );
+    event BatchFulfilled(address indexed safe, address indexed initiator, uint256 indexed batchId, uint256 fee);
 
     event TriggerUpdated(address indexed oldTrigger, address indexed newTrigger);
     event SafeConfigured(address indexed safe, address indexed fatBERA, bytes cometBFTPublicKey);
@@ -99,18 +85,18 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     bytes32 public constant TRIGGER_ROLE = keccak256("TRIGGER_ROLE");
-    
+
     // Berachain constants
     address public constant BERACHAIN_WITHDRAW_CONTRACT = 0x00000961Ef480Eb55e80D19ad83579A64c007002;
-    
+
     // Safe-specific configurations
     struct SafeConfig {
         address fatBERAContract;
         bool isConfigured;
     }
-    
+
     mapping(address => SafeConfig) public safeConfigs;
-    
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          CONSTRUCTOR                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -118,7 +104,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     constructor(address admin, address initialTrigger) {
         if (admin == address(0)) revert ZeroAddress();
         if (initialTrigger == address(0)) revert ZeroAddress();
-        
+
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(TRIGGER_ROLE, initialTrigger);
     }
@@ -132,18 +118,12 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @param safe The Safe contract address
      * @param fatBERAContract The fatBERA contract address for this Safe
      */
-    function configureSafe(
-        address safe,
-        address fatBERAContract
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function configureSafe(address safe, address fatBERAContract) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (safe == address(0)) revert ZeroAddress();
         if (fatBERAContract == address(0)) revert InvalidFatBERAContract();
-        
-        safeConfigs[safe] = SafeConfig({
-            fatBERAContract: fatBERAContract,
-            isConfigured: true
-        });
-        
+
+        safeConfigs[safe] = SafeConfig({fatBERAContract: fatBERAContract, isConfigured: true});
+
         emit SafeConfigured(safe, fatBERAContract, "");
     }
 
@@ -176,11 +156,11 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @return batchId The ID of the started batch
      * @return totalAmount The total amount in the batch
      */
-    function startWithdrawalBatch(address safe) 
-        external 
-        onlyRole(TRIGGER_ROLE) 
-        nonReentrant 
-        returns (uint256 batchId, uint256 totalAmount) 
+    function startWithdrawalBatch(address safe)
+        external
+        onlyRole(TRIGGER_ROLE)
+        nonReentrant
+        returns (uint256 batchId, uint256 totalAmount)
     {
         return _startWithdrawalBatch(safe);
     }
@@ -191,11 +171,11 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @param withdrawAmount The amount to withdraw
      * @param cometBFTPublicKey The CometBFT public key of the specific validator to withdraw from
      */
-    function requestValidatorWithdrawal(
-        address safe,
-        uint256 withdrawAmount,
-        bytes calldata cometBFTPublicKey
-    ) external onlyRole(TRIGGER_ROLE) nonReentrant {
+    function requestValidatorWithdrawal(address safe, uint256 withdrawAmount, bytes calldata cometBFTPublicKey)
+        external
+        onlyRole(TRIGGER_ROLE)
+        nonReentrant
+    {
         _requestValidatorWithdrawal(safe, withdrawAmount, cometBFTPublicKey);
     }
 
@@ -206,16 +186,18 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @return batchId The ID of the started batch
      * @return totalAmount The total amount in the batch that was requested for validator withdrawal
      */
-    function startWithdrawalBatchAndRequestValidatorWithdrawal(
-        address safe,
-        bytes calldata cometBFTPublicKey
-    ) external onlyRole(TRIGGER_ROLE) nonReentrant returns (uint256 batchId, uint256 totalAmount) {
+    function startWithdrawalBatchAndRequestValidatorWithdrawal(address safe, bytes calldata cometBFTPublicKey)
+        external
+        onlyRole(TRIGGER_ROLE)
+        nonReentrant
+        returns (uint256 batchId, uint256 totalAmount)
+    {
         // Step 1: Start withdrawal batch
         (batchId, totalAmount) = _startWithdrawalBatch(safe);
-        
+
         // Step 2: Request validator withdrawal with the batch total amount
         _requestValidatorWithdrawal(safe, totalAmount, cometBFTPublicKey);
-        
+
         return (batchId, totalAmount);
     }
 
@@ -229,45 +211,36 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @return batchId The ID of the started batch
      * @return totalAmount The total amount in the batch
      */
-    function _startWithdrawalBatch(address safe) 
-        internal 
-        returns (uint256 batchId, uint256 totalAmount) 
-    {
+    function _startWithdrawalBatch(address safe) internal returns (uint256 batchId, uint256 totalAmount) {
         SafeConfig memory config = safeConfigs[safe];
         if (!config.isConfigured) revert UnauthorizedSafe();
-        
+
         // Verify the Safe has the WITHDRAW_FULFILLER_ROLE on the fatBERA contract
         IFatBERAV2 fatBERA = IFatBERAV2(config.fatBERAContract);
         bytes32 withdrawFulfillerRole = fatBERA.WITHDRAW_FULFILLER_ROLE();
         if (!fatBERA.hasRole(withdrawFulfillerRole, safe)) revert SafeNotAuthorized();
-        
+
         // Encode the call to startWithdrawalBatch
-        bytes memory startBatchData = abi.encodeWithSelector(
-            IFatBERAV2.startWithdrawalBatch.selector
-        );
-        
+        bytes memory startBatchData = abi.encodeWithSelector(IFatBERAV2.startWithdrawalBatch.selector);
+
         // Store the current batch ID before the call to detect the new one
         uint256 currentBatchIdBefore = fatBERA.currentBatchId();
-        
+
         // Execute via Safe module
-        bool success = ISafe(safe).execTransactionFromModule(
-            config.fatBERAContract,
-            0,
-            startBatchData,
-            Enum.Operation.Call
-        );
-        
+        bool success =
+            ISafe(safe).execTransactionFromModule(config.fatBERAContract, 0, startBatchData, Enum.Operation.Call);
+
         if (!success) revert TransactionFailed();
-        
+
         batchId = currentBatchIdBefore; // The batch that was just started
-        
+
         // Get the total amount from the batch that was just frozen
         (,, bool frozen,, uint256 total) = fatBERA.batches(batchId);
         if (!frozen) revert TransactionFailed();
         totalAmount = total;
-        
+
         emit WithdrawalBatchStarted(safe, msg.sender, batchId, totalAmount);
-        
+
         return (batchId, totalAmount);
     }
 
@@ -277,44 +250,30 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @param withdrawAmount The amount to withdraw
      * @param cometBFTPublicKey The CometBFT public key of the specific validator to withdraw from
      */
-    function _requestValidatorWithdrawal(
-        address safe,
-        uint256 withdrawAmount,
-        bytes calldata cometBFTPublicKey
-    ) internal {
+    function _requestValidatorWithdrawal(address safe, uint256 withdrawAmount, bytes calldata cometBFTPublicKey)
+        internal
+    {
         SafeConfig memory config = safeConfigs[safe];
         if (!config.isConfigured) revert UnauthorizedSafe();
         if (withdrawAmount == 0) revert ZeroAmount();
         if (cometBFTPublicKey.length == 0) revert InvalidCometBFTPublicKey();
-        
+
         // Get the current withdrawal fee
         (bool success, bytes memory returnData) = BERACHAIN_WITHDRAW_CONTRACT.staticcall("");
         if (!success) revert TransactionFailed();
         uint256 withdrawFee = abi.decode(returnData, (uint256));
-        
+
         // Encode the withdrawal request
-        bytes memory withdrawRequest = abi.encodePacked(
-            cometBFTPublicKey,
-            withdrawAmount
-        );
-        
+        bytes memory withdrawRequest = abi.encodePacked(cometBFTPublicKey, withdrawAmount);
+
         // Execute the validator withdrawal request via Safe
         success = ISafe(safe).execTransactionFromModule(
-            BERACHAIN_WITHDRAW_CONTRACT,
-            withdrawFee,
-            withdrawRequest,
-            Enum.Operation.Call
+            BERACHAIN_WITHDRAW_CONTRACT, withdrawFee, withdrawRequest, Enum.Operation.Call
         );
-        
+
         if (!success) revert TransactionFailed();
-        
-        emit ValidatorWithdrawalRequested(
-            safe,
-            msg.sender,
-            cometBFTPublicKey,
-            withdrawAmount,
-            withdrawFee
-        );
+
+        emit ValidatorWithdrawalRequested(safe, msg.sender, cometBFTPublicKey, withdrawAmount, withdrawFee);
     }
 
     /**
@@ -323,31 +282,22 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @param batchId The batch ID to fulfill
      * @param fee The withdrawal fee to deduct
      */
-    function fulfillWithdrawalBatch(
-        address safe,
-        uint256 batchId,
-        uint256 fee
-    ) external onlyRole(TRIGGER_ROLE) nonReentrant {
+    function fulfillWithdrawalBatch(address safe, uint256 batchId, uint256 fee)
+        external
+        onlyRole(TRIGGER_ROLE)
+        nonReentrant
+    {
         SafeConfig memory config = safeConfigs[safe];
         if (!config.isConfigured) revert UnauthorizedSafe();
-        
+
         // Encode the call to fulfillBatch
-        bytes memory data = abi.encodeWithSelector(
-            IFatBERAV2.fulfillBatch.selector,
-            batchId,
-            fee
-        );
-        
+        bytes memory data = abi.encodeWithSelector(IFatBERAV2.fulfillBatch.selector, batchId, fee);
+
         // Execute via Safe module
-        bool success = ISafe(safe).execTransactionFromModule(
-            config.fatBERAContract,
-            0,
-            data,
-            Enum.Operation.Call
-        );
-        
+        bool success = ISafe(safe).execTransactionFromModule(config.fatBERAContract, 0, data, Enum.Operation.Call);
+
         if (!success) revert TransactionFailed();
-        
+
         emit BatchFulfilled(safe, msg.sender, batchId, fee);
     }
 
@@ -391,4 +341,4 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     function isSafeConfigured(address safe) external view returns (bool) {
         return safeConfigs[safe].isConfigured;
     }
-} 
+}

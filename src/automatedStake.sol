@@ -49,12 +49,7 @@ interface IBeaconDeposit {
  *   2. Unwraps WBERA to native BERA,
  *   3. Deposits the native BERA to the beacon deposit contract (staking to the validator).
  */
-contract AutomatedStake is 
-    Initializable, 
-    AccessControlUpgradeable, 
-    ReentrancyGuardUpgradeable,
-    UUPSUpgradeable 
-{
+contract AutomatedStake is Initializable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           ERRORS                             */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -132,11 +127,9 @@ contract AutomatedStake is
         address operatorAdmin,
         address staker
     ) external initializer {
-        if (_fatBera == address(0) || 
-            _wBera == address(0) || 
-            _beaconDeposit == address(0) || 
-            operatorAdmin == address(0) ||
-            staker == address(0)
+        if (
+            _fatBera == address(0) || _wBera == address(0) || _beaconDeposit == address(0)
+                || operatorAdmin == address(0) || staker == address(0)
         ) {
             revert InvalidAddress();
         }
@@ -175,7 +168,11 @@ contract AutomatedStake is
      * @param amount The exact amount to withdraw and stake. Must be >= minimumStakeAmount and <= current deposit principal
      * @param validatorIndex The index of the validator to stake to (0, 1, or 2)
      */
-    function executeWithdrawUnwrapAndStake(uint256 amount, uint256 validatorIndex) external onlyRole(STAKER_ROLE) nonReentrant {
+    function executeWithdrawUnwrapAndStake(uint256 amount, uint256 validatorIndex)
+        external
+        onlyRole(STAKER_ROLE)
+        nonReentrant
+    {
         if (amount == 0) revert ZeroAmount();
         if (amount < minimumStakeAmount) {
             revert InsufficientStakeAmount(amount, minimumStakeAmount);
@@ -195,10 +192,7 @@ contract AutomatedStake is
 
         // Step 3: Stake to the validator via the beacon deposit contract.
         IBeaconDeposit(beaconDeposit).deposit{value: amount}(
-            validator.pubkey,
-            validator.withdrawalCredentials,
-            validator.signature,
-            validator.operator
+            validator.pubkey, validator.withdrawalCredentials, validator.signature, validator.operator
         );
 
         emit WithdrawUnwrapAndStakeExecuted(amount, validatorIndex, validator.pubkey);
@@ -222,15 +216,16 @@ contract AutomatedStake is
         bytes calldata signature,
         address operator
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        
         uint256 index = validators.length;
-        validators.push(Validator({
-            pubkey: pubkey,
-            withdrawalCredentials: withdrawalCredentials,
-            signature: signature,
-            operator: operator
-        }));
-        
+        validators.push(
+            Validator({
+                pubkey: pubkey,
+                withdrawalCredentials: withdrawalCredentials,
+                signature: signature,
+                operator: operator
+            })
+        );
+
         emit ValidatorAdded(index, pubkey, operator);
     }
 
@@ -240,11 +235,14 @@ contract AutomatedStake is
      * @param newPubkey New validator public key
      * @dev This is the most commonly updated parameter when adding new validators
      */
-    function setValidatorPubkey(uint256 validatorIndex, bytes calldata newPubkey) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setValidatorPubkey(uint256 validatorIndex, bytes calldata newPubkey)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         if (validatorIndex >= validators.length) {
             revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
         }
-        
+
         validators[validatorIndex].pubkey = newPubkey;
         emit ValidatorPubkeyUpdated(validatorIndex, newPubkey);
     }
@@ -255,11 +253,14 @@ contract AutomatedStake is
      * @param newWithdrawalCredentials New withdrawal credentials
      * @dev This should rarely need to be updated as it's typically the same for all validators
      */
-    function setWithdrawalCredentials(uint256 validatorIndex, bytes calldata newWithdrawalCredentials) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setWithdrawalCredentials(uint256 validatorIndex, bytes calldata newWithdrawalCredentials)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         if (validatorIndex >= validators.length) {
             revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
         }
-        
+
         validators[validatorIndex].withdrawalCredentials = newWithdrawalCredentials;
         emit WithdrawalCredentialsUpdated(validatorIndex, newWithdrawalCredentials);
     }
@@ -269,11 +270,14 @@ contract AutomatedStake is
      * @param validatorIndex Index of the validator to update
      * @param newSignature New validator signature
      */
-    function setValidatorSignature(uint256 validatorIndex, bytes calldata newSignature) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setValidatorSignature(uint256 validatorIndex, bytes calldata newSignature)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         if (validatorIndex >= validators.length) {
             revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
         }
-        
+
         validators[validatorIndex].signature = newSignature;
         emit ValidatorSignatureUpdated(validatorIndex, newSignature);
     }
@@ -287,7 +291,7 @@ contract AutomatedStake is
         if (validatorIndex >= validators.length) {
             revert InvalidValidatorIndex(validatorIndex, validators.length - 1);
         }
-        
+
         validators[validatorIndex].operator = newOperator;
         emit ValidatorOperatorUpdated(validatorIndex, newOperator);
     }
@@ -310,13 +314,13 @@ contract AutomatedStake is
      */
     function rescueFunds(address payable recipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (recipient == address(0)) revert InvalidAddress();
-        
+
         uint256 balance = address(this).balance;
         if (balance == 0) revert NoFundsToRescue();
-        
-        (bool success, ) = recipient.call{value: balance}("");
+
+        (bool success,) = recipient.call{value: balance}("");
         if (!success) revert TransferFailed();
-        
+
         emit FundsRescued(recipient, balance);
     }
 
@@ -327,11 +331,7 @@ contract AutomatedStake is
      * @param amount The amount of tokens to rescue
      * @dev This function should only be used in emergency situations.
      */
-    function rescueTokens(
-        address token,
-        address recipient,
-        uint256 amount
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function rescueTokens(address token, address recipient, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (token == address(0) || recipient == address(0)) revert InvalidAddress();
         if (amount == 0) revert ZeroAmount();
 
@@ -339,7 +339,7 @@ contract AutomatedStake is
         if (!success) revert TransferFailed();
 
         emit TokensRescued(token, recipient, amount);
-    }    
+    }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                      INTERNAL FUNCTIONS                    */

@@ -9,12 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {fatBERA as FatBERA} from "./fatBERA.sol";
 
-contract StakedFatBERA is
-    ERC4626Upgradeable,
-    PausableUpgradeable,
-    UUPSUpgradeable,
-    AccessControlUpgradeable
-{
+contract StakedFatBERA is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgradeable, AccessControlUpgradeable {
     /* ───────────────────────────────────────────────────────────────────────────
         EVENTS
     ─────────────────────────────────────────────────────────────────────────── */
@@ -22,9 +17,10 @@ contract StakedFatBERA is
     /* ───────────────────────────────────────────────────────────────────────────
         CONSTANTS
     ─────────────────────────────────────────────────────────────────────────── */
-    bytes32 public constant OPERATOR_ROLE  = keccak256("OPERATOR_ROLE");
-    bytes32 public constant ADMIN_ROLE     = DEFAULT_ADMIN_ROLE;
-    IERC20  public constant WBERA          = IERC20(0x6969696969696969696969696969696969696969);
+
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    IERC20 public constant WBERA = IERC20(0x6969696969696969696969696969696969696969);
 
     /* ───────────────────────────────────────────────────────────────────────────
         STORAGE
@@ -34,12 +30,14 @@ contract StakedFatBERA is
         CONSTRUCTOR
     ─────────────────────────────────────────────────────────────────────────── */
     /// @custom:oz-upgrades-unsafe-allow constructor
+
     constructor() {
         _disableInitializers();
     }
     /* ───────────────────────────────────────────────────────────────────────────
         INITIALIZER
     ─────────────────────────────────────────────────────────────────────────── */
+
     function initialize(address _owner, address _fatBERA) external initializer {
         fatBERA = FatBERA(_fatBERA);
         __UUPSUpgradeable_init();
@@ -57,6 +55,7 @@ contract StakedFatBERA is
     /* ───────────────────────────────────────────────────────────────────────────
         ADMIN LOGIC
     ─────────────────────────────────────────────────────────────────────────── */
+
     function pause() public onlyRole(ADMIN_ROLE) {
         _pause();
     }
@@ -77,33 +76,24 @@ contract StakedFatBERA is
     /* ───────────────────────────────────────────────────────────────────────────
         PUBLIC LOGIC
     ─────────────────────────────────────────────────────────────────────────── */
-    function deposit(
-        uint256 assets,
-        address receiver
-    ) public override whenNotPaused returns (uint256) {
+    function deposit(uint256 assets, address receiver) public override whenNotPaused returns (uint256) {
         return super.deposit(assets, receiver);
     }
 
-    function mint(
-        uint256 shares,
-        address receiver
-    ) public override whenNotPaused returns (uint256) {
+    function mint(uint256 shares, address receiver) public override whenNotPaused returns (uint256) {
         return super.mint(shares, receiver);
     }
 
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public override whenNotPaused returns (uint256) {
+    function withdraw(uint256 assets, address receiver, address owner)
+        public
+        override
+        whenNotPaused
+        returns (uint256)
+    {
         return super.withdraw(assets, receiver, owner);
     }
 
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public override whenNotPaused returns (uint256) {
+    function redeem(uint256 shares, address receiver, address owner) public override whenNotPaused returns (uint256) {
         return super.redeem(shares, receiver, owner);
     }
 }

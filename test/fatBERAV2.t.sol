@@ -53,9 +53,9 @@ contract fatBERATest is Test {
         // 3. initializeV2 is a reinitializer and doesn't need to call parent initializers again
         Options memory opts;
         opts.unsafeAllow = "incorrect-initializer-order,missing-initializer-call";
-        
+
         address proxy = Upgrades.deployUUPSProxy("fatBERA.sol:fatBERA", initData, opts);
-        
+
         // Upgrade to V2 with initialization data
         bytes memory initV2Data = abi.encodeWithSelector(fatBERAV2.initializeV2.selector, fulfiller);
         vm.startPrank(admin);
@@ -1825,7 +1825,7 @@ contract fatBERATest is Test {
     function test_ReentrancyProtection() public {
         // Test that reentrancy protection works on key functions
         // Since ERC20 transfers don't trigger receive(), we test direct reentrancy
-        
+
         vm.prank(alice);
         vault.deposit(100e18, alice);
 
@@ -1845,7 +1845,7 @@ contract fatBERATest is Test {
         // by verifying it can only be called once per user per amount
         vm.prank(alice);
         vault.claimWithdrawnAssets();
-        
+
         // Second call should revert with NothingToClaim since claimable is now 0
         vm.prank(alice);
         vm.expectRevert(fatBERAV2.NothingToClaim.selector);
@@ -2070,7 +2070,9 @@ contract fatBERATest is Test {
         uint256 afterDepositsTotalSupply = vault.totalSupply();
 
         // Verify deposits updated accounting correctly
-        assertEq(afterDepositsDepositPrincipal, initialDepositPrincipal + 300e18, "depositPrincipal should increase by 300");
+        assertEq(
+            afterDepositsDepositPrincipal, initialDepositPrincipal + 300e18, "depositPrincipal should increase by 300"
+        );
         assertEq(afterDepositsTotalSupply, initialTotalSupply + 300e18, "totalSupply should increase by 300");
 
         // Admin withdraws some principal for staking (V1 functionality)
@@ -2078,15 +2080,25 @@ contract fatBERATest is Test {
         vault.withdrawPrincipal(150e18, admin);
 
         uint256 afterWithdrawDepositPrincipal = vault.depositPrincipal();
-        assertEq(afterWithdrawDepositPrincipal, afterDepositsDepositPrincipal - 150e18, "depositPrincipal should decrease by 150");
+        assertEq(
+            afterWithdrawDepositPrincipal,
+            afterDepositsDepositPrincipal - 150e18,
+            "depositPrincipal should decrease by 150"
+        );
 
         // Alice requests V2 withdrawal
         vm.prank(alice);
         vault.requestWithdraw(100e18);
 
         // V2 withdrawal request should NOT affect depositPrincipal
-        assertEq(vault.depositPrincipal(), afterWithdrawDepositPrincipal, "depositPrincipal should not change on withdrawal request");
-        assertEq(vault.totalSupply(), afterDepositsTotalSupply - 100e18, "totalSupply should decrease by withdrawn shares");
+        assertEq(
+            vault.depositPrincipal(),
+            afterWithdrawDepositPrincipal,
+            "depositPrincipal should not change on withdrawal request"
+        );
+        assertEq(
+            vault.totalSupply(), afterDepositsTotalSupply - 100e18, "totalSupply should decrease by withdrawn shares"
+        );
 
         // Process V2 withdrawal
         vm.prank(fulfiller);
@@ -2103,8 +2115,10 @@ contract fatBERATest is Test {
         // After fulfillment, any remainder from rounding should be added to depositPrincipal
         // but the main accounting should remain intact
         uint256 afterFulfillmentDepositPrincipal = vault.depositPrincipal();
-        assertTrue(afterFulfillmentDepositPrincipal >= afterWithdrawDepositPrincipal, "depositPrincipal should not decrease");
-        
+        assertTrue(
+            afterFulfillmentDepositPrincipal >= afterWithdrawDepositPrincipal, "depositPrincipal should not decrease"
+        );
+
         // The difference should be small (just rounding remainder if any)
         uint256 difference = afterFulfillmentDepositPrincipal - afterWithdrawDepositPrincipal;
         assertTrue(difference <= 1e15, "Difference should be minimal (just rounding)"); // Allow up to 0.001 BERA difference
@@ -2114,7 +2128,9 @@ contract fatBERATest is Test {
         vault.claimWithdrawnAssets();
 
         // Claiming should not affect depositPrincipal
-        assertEq(vault.depositPrincipal(), afterFulfillmentDepositPrincipal, "depositPrincipal should not change on claim");
+        assertEq(
+            vault.depositPrincipal(), afterFulfillmentDepositPrincipal, "depositPrincipal should not change on claim"
+        );
 
         // Bob should still be able to earn rewards and admin should still be able to withdraw principal
         notifyAndWarp(address(wbera), 20e18);
@@ -2124,7 +2140,11 @@ contract fatBERATest is Test {
         // Admin should still be able to withdraw more principal
         vm.prank(admin);
         vault.withdrawPrincipal(50e18, admin);
-        assertEq(vault.depositPrincipal(), afterFulfillmentDepositPrincipal - 50e18, "Admin should still be able to withdraw principal");
+        assertEq(
+            vault.depositPrincipal(),
+            afterFulfillmentDepositPrincipal - 50e18,
+            "Admin should still be able to withdraw principal"
+        );
     }
 
     function test_RequestWithdrawExceedsBalance() public {
@@ -2250,7 +2270,9 @@ contract fatBERATest is Test {
 
         // Alice should get 100/200 = 50% of rewards (100 active shares out of 200 total)
         // Bob should get 100/200 = 50% of rewards
-        assertApproxEqAbs(vault.previewRewards(alice, address(wbera)), 15e18, tolerance, "Alice should get 15 BERA rewards");
+        assertApproxEqAbs(
+            vault.previewRewards(alice, address(wbera)), 15e18, tolerance, "Alice should get 15 BERA rewards"
+        );
         assertApproxEqAbs(vault.previewRewards(bob, address(wbera)), 15e18, tolerance, "Bob should get 15 BERA rewards");
 
         // Process withdrawal
@@ -2274,8 +2296,15 @@ contract fatBERATest is Test {
         notifyAndWarp(address(wbera), 30e18);
 
         // Now Alice has 100 shares, Bob has 100 shares, so 50/50 split
-        assertApproxEqAbs(vault.previewRewards(alice, address(wbera)), 15e18, tolerance, "Alice should get 15 BERA from second reward");
-        assertApproxEqAbs(vault.previewRewards(bob, address(wbera)), 30e18, tolerance, "Bob should get 30 BERA 15 from first 15 from second reward");
+        assertApproxEqAbs(
+            vault.previewRewards(alice, address(wbera)), 15e18, tolerance, "Alice should get 15 BERA from second reward"
+        );
+        assertApproxEqAbs(
+            vault.previewRewards(bob, address(wbera)),
+            30e18,
+            tolerance,
+            "Bob should get 30 BERA 15 from first 15 from second reward"
+        );
     }
 
     function test_MaximumFeeScenario() public {
@@ -2350,7 +2379,10 @@ contract fatBERATest is Test {
         uint256 charlieClaimable = vault.claimable(charlie);
 
         // Sum should not exceed netAmount
-        assertTrue(aliceClaimable + bobClaimable + charlieClaimable <= netAmount, "Total claimable should not exceed net amount");
+        assertTrue(
+            aliceClaimable + bobClaimable + charlieClaimable <= netAmount,
+            "Total claimable should not exceed net amount"
+        );
 
         // Any remainder should be added to principal
         uint256 remainder = netAmount - (aliceClaimable + bobClaimable + charlieClaimable);
@@ -2450,65 +2482,65 @@ contract fatBERATest is Test {
         address[] memory users = new address[](numUsers);
         uint256[] memory userDeposits = new uint256[](numUsers);
         uint256[] memory userWithdrawals = new uint256[](numUsers);
-        
+
         console.log("Setting up %d users for mass withdrawal test", numUsers);
-        
+
         uint256 totalDeposited = 0;
         uint256 totalWithdrawRequested = 0;
-        
+
         // Setup users with varying deposit amounts
         for (uint256 i = 0; i < numUsers; i++) {
             users[i] = makeAddr(string.concat("user", vm.toString(i)));
-            
+
             // Vary deposit amounts: 1-10 BERA per user
             userDeposits[i] = (i % 10 + 1) * 1e18;
             totalDeposited += userDeposits[i];
-            
+
             // Mint WBERA to each user
             wbera.mint(users[i], userDeposits[i]);
-            
+
             // Approve vault
             vm.prank(users[i]);
             wbera.approve(address(vault), userDeposits[i]);
-            
+
             // Deposit
             vm.prank(users[i]);
             vault.deposit(userDeposits[i], users[i]);
         }
-        
+
         console.log("Total deposited: %d BERA", totalDeposited / 1e18);
         assertEq(vault.totalSupply(), totalDeposited, "Total supply should match deposits");
-        
+
         // Add some rewards before withdrawals
         notifyAndWarp(address(wbera), 100e18);
-        
+
         // All users request partial withdrawals (50-75% of their deposits)
         for (uint256 i = 0; i < numUsers; i++) {
             // Withdraw between 50-75% of deposit
             userWithdrawals[i] = (userDeposits[i] * (50 + (i % 26))) / 100;
             totalWithdrawRequested += userWithdrawals[i];
-            
+
             vm.prank(users[i]);
             vault.requestWithdraw(userWithdrawals[i]);
         }
-        
+
         console.log("Total withdrawal requested: %d BERA", totalWithdrawRequested / 1e18);
-        
+
         // Verify batch state
         (,, uint256 batchTotal) = vault.batches(1);
         assertEq(batchTotal, totalWithdrawRequested, "Batch total should match requested withdrawals");
         assertEq(vault.totalPending(), totalWithdrawRequested, "Total pending should match requests");
-        
+
         // Verify individual pending amounts
         for (uint256 i = 0; i < numUsers; i++) {
             assertEq(vault.pending(users[i]), userWithdrawals[i], "Individual pending amount incorrect");
             assertEq(vault.balanceOf(users[i]), userDeposits[i] - userWithdrawals[i], "Remaining balance incorrect");
         }
-        
+
         // Start withdrawal batch
         vm.prank(fulfiller);
         vault.startWithdrawalBatch();
-        
+
         // Verify batch is frozen and new batch started
         (bool frozen1, bool fulfilled1,) = vault.batches(1);
         (bool frozen2, bool fulfilled2,) = vault.batches(2);
@@ -2517,80 +2549,85 @@ contract fatBERATest is Test {
         assertFalse(frozen2, "Batch 2 should not be frozen");
         assertFalse(fulfilled2, "Batch 2 should not be fulfilled");
         assertEq(vault.currentBatchId(), 2, "Current batch ID should be 2");
-        
+
         // Test that users can still request withdrawals in new batch
         vm.prank(users[0]);
         vault.requestWithdraw(userDeposits[0] - userWithdrawals[0]); // Withdraw remaining
-        
+
         (,, uint256 batch2Total) = vault.batches(2);
         assertEq(batch2Total, userDeposits[0] - userWithdrawals[0], "New batch should have the additional withdrawal");
-        
+
         // Fulfill first batch with 2% fee
         uint256 fee = totalWithdrawRequested * 2 / 100; // 2% validator fee
         uint256 netAmount = totalWithdrawRequested - fee;
-        
+
         console.log("Fulfilling batch with fee: %d BERA, net: %d BERA", fee / 1e18, netAmount / 1e18);
-        
+
         wbera.mint(fulfiller, netAmount);
         vm.startPrank(fulfiller);
         wbera.approve(address(vault), netAmount);
         vault.fulfillBatch(1, fee);
         vm.stopPrank();
-        
+
         // Verify batch is now fulfilled
         (bool frozen1After, bool fulfilled1After,) = vault.batches(1);
         assertTrue(frozen1After, "Batch 1 should still be frozen");
         assertTrue(fulfilled1After, "Batch 1 should now be fulfilled");
-        
+
         // Verify totalPending decreased
-        assertEq(vault.totalPending(), userDeposits[0] - userWithdrawals[0], "Total pending should only include batch 2");
-        
+        assertEq(
+            vault.totalPending(), userDeposits[0] - userWithdrawals[0], "Total pending should only include batch 2"
+        );
+
         // Calculate and verify claimable amounts for each user
         uint256 totalClaimable = 0;
         for (uint256 i = 0; i < numUsers; i++) {
-            uint256 expectedClaimable = FixedPointMathLib.fullMulDiv(userWithdrawals[i], netAmount, totalWithdrawRequested);
+            uint256 expectedClaimable =
+                FixedPointMathLib.fullMulDiv(userWithdrawals[i], netAmount, totalWithdrawRequested);
             uint256 actualClaimable = vault.claimable(users[i]);
-            
+
             assertApproxEqAbs(actualClaimable, expectedClaimable, 1, "Claimable amount incorrect for user");
             totalClaimable += actualClaimable;
-            
+
             // Verify pending is cleared for batch 1, except user[0] who has pending in batch 2
             if (i == 0) {
-                assertEq(vault.pending(users[i]), userDeposits[0] - userWithdrawals[0], "User 0 should have batch 2 pending");
+                assertEq(
+                    vault.pending(users[i]), userDeposits[0] - userWithdrawals[0], "User 0 should have batch 2 pending"
+                );
             } else {
                 assertEq(vault.pending(users[i]), 0, "Other users should have 0 pending after batch 1 fulfill");
             }
         }
-        
+
         // Total claimable should not exceed net amount (due to rounding down)
         assertLe(totalClaimable, netAmount, "Total claimable should not exceed net amount");
-        
+
         // Any remainder should be added to depositPrincipal
         uint256 remainder = netAmount - totalClaimable;
         console.log("Rounding remainder: %d wei", remainder);
-        
+
         // Test mass claiming
         uint256 totalClaimed = 0;
         for (uint256 i = 0; i < numUsers; i++) {
             uint256 claimableBefore = vault.claimable(users[i]);
             if (claimableBefore > 0) {
                 uint256 balanceBefore = wbera.balanceOf(users[i]);
-                
+
                 vm.prank(users[i]);
                 vault.claimWithdrawnAssets();
-                
+
                 uint256 balanceAfter = wbera.balanceOf(users[i]);
                 uint256 claimed = balanceAfter - balanceBefore;
-                
+
                 assertEq(claimed, claimableBefore, "Claimed amount should match claimable");
                 assertEq(vault.claimable(users[i]), 0, "Claimable should be 0 after claim");
-                
+
                 totalClaimed += claimed;
             }
         }
-        
+
         assertEq(totalClaimed, totalClaimable, "Total claimed should match total claimable");
-        
+
         console.log("Mass withdrawal test completed successfully!");
         console.log("- %d users processed", numUsers);
         console.log("- %d BERA total deposited", totalDeposited / 1e18);
@@ -2604,90 +2641,90 @@ contract fatBERATest is Test {
         uint256 numUsersPerBatch = 50;
         address[] memory batch1Users = new address[](numUsersPerBatch);
         address[] memory batch2Users = new address[](numUsersPerBatch);
-        
+
         uint256 depositAmount = 10e18;
         uint256 withdrawAmount = 8e18;
-        
+
         // Setup batch 1 users
         for (uint256 i = 0; i < numUsersPerBatch; i++) {
             batch1Users[i] = makeAddr(string.concat("batch1user", vm.toString(i)));
             wbera.mint(batch1Users[i], depositAmount);
-            
+
             vm.prank(batch1Users[i]);
             wbera.approve(address(vault), depositAmount);
-            
+
             vm.prank(batch1Users[i]);
             vault.deposit(depositAmount, batch1Users[i]);
-            
+
             vm.prank(batch1Users[i]);
             vault.requestWithdraw(withdrawAmount);
         }
-        
+
         // Start first batch
         vm.prank(fulfiller);
         vault.startWithdrawalBatch();
-        
+
         // Setup batch 2 users
         for (uint256 i = 0; i < numUsersPerBatch; i++) {
             batch2Users[i] = makeAddr(string.concat("batch2user", vm.toString(i)));
             wbera.mint(batch2Users[i], depositAmount);
-            
+
             vm.prank(batch2Users[i]);
             wbera.approve(address(vault), depositAmount);
-            
+
             vm.prank(batch2Users[i]);
             vault.deposit(depositAmount, batch2Users[i]);
-            
+
             vm.prank(batch2Users[i]);
             vault.requestWithdraw(withdrawAmount);
         }
-        
+
         // Start second batch
         vm.prank(fulfiller);
         vault.startWithdrawalBatch();
-        
+
         // Verify batch states
         assertEq(vault.currentBatchId(), 3, "Should be on batch 3");
-        
+
         (,, uint256 batch1Total) = vault.batches(1);
         (,, uint256 batch2Total) = vault.batches(2);
-        
+
         assertEq(batch1Total, numUsersPerBatch * withdrawAmount, "Batch 1 total incorrect");
         assertEq(batch2Total, numUsersPerBatch * withdrawAmount, "Batch 2 total incorrect");
-        
+
         // Fulfill both batches (batch 2 first to test order independence)
         uint256 netAmount = numUsersPerBatch * withdrawAmount;
-        
+
         // Fulfill batch 2
         wbera.mint(fulfiller, netAmount);
         vm.startPrank(fulfiller);
         wbera.approve(address(vault), netAmount);
         vault.fulfillBatch(2, 0);
         vm.stopPrank();
-        
+
         // Fulfill batch 1
         wbera.mint(fulfiller, netAmount);
         vm.startPrank(fulfiller);
         wbera.approve(address(vault), netAmount);
         vault.fulfillBatch(1, 0);
         vm.stopPrank();
-        
+
         // Verify all users can claim from both batches
         for (uint256 i = 0; i < numUsersPerBatch; i++) {
             assertEq(vault.claimable(batch1Users[i]), withdrawAmount, "Batch 1 user claimable incorrect");
             assertEq(vault.claimable(batch2Users[i]), withdrawAmount, "Batch 2 user claimable incorrect");
-            
+
             // Test claiming
             vm.prank(batch1Users[i]);
             vault.claimWithdrawnAssets();
-            
+
             vm.prank(batch2Users[i]);
             vault.claimWithdrawnAssets();
-            
+
             assertEq(vault.claimable(batch1Users[i]), 0, "Batch 1 user should have 0 claimable after claim");
             assertEq(vault.claimable(batch2Users[i]), 0, "Batch 2 user should have 0 claimable after claim");
         }
-        
+
         console.log("Parallel batch processing test completed successfully!");
     }
 
@@ -2695,54 +2732,54 @@ contract fatBERATest is Test {
         uint256 numUsers = 100;
         uint256 depositAmount = 10e18;
         uint256 withdrawAmount = 8e18;
-        
+
         console2.log("\n=== GAS USAGE TEST: fulfillBatch with %d users ===", numUsers);
-        
+
         // Setup users and deposits
         address[] memory users = new address[](numUsers);
         for (uint256 i = 0; i < numUsers; i++) {
             users[i] = makeAddr(string.concat("gasTestUser", vm.toString(i)));
             wbera.mint(users[i], depositAmount);
-            
+
             vm.prank(users[i]);
             wbera.approve(address(vault), depositAmount);
-            
+
             vm.prank(users[i]);
             vault.deposit(depositAmount, users[i]);
-            
+
             vm.prank(users[i]);
             vault.requestWithdraw(withdrawAmount);
         }
-        
+
         // Start batch
         vm.prank(fulfiller);
         vault.startWithdrawalBatch();
-        
+
         // Setup for fulfillment
         uint256 totalWithdrawAmount = numUsers * withdrawAmount;
         uint256 fee = totalWithdrawAmount * 2 / 100; // 2% fee
         uint256 netAmount = totalWithdrawAmount - fee;
-        
+
         wbera.mint(fulfiller, netAmount);
         vm.prank(fulfiller);
         wbera.approve(address(vault), netAmount);
-        
+
         // Measure gas usage
         vm.prank(fulfiller);
         uint256 gasStart = gasleft();
         vault.fulfillBatch(1, fee);
         uint256 gasUsed = gasStart - gasleft();
-        
+
         // Log results
         console2.log("Gas used for fulfillBatch with %d users: %d", numUsers, gasUsed);
         console2.log("Gas per user: %d", gasUsed / numUsers);
-        
+
         // Compare to typical blockchain gas limits
         uint256 berachainBlockGasLimit = 30_000_000; // ~30M gas typical for Berachain
-        
+
         console2.log("Berachain block gas limit: %d", berachainBlockGasLimit);
         console2.log("Gas usage as %% of block limit: %d%%", (gasUsed * 100) / berachainBlockGasLimit);
-        
+
         // Test different batch sizes to find optimal limit
         uint256[] memory testSizes = new uint256[](5);
         testSizes[0] = 50;
@@ -2750,23 +2787,25 @@ contract fatBERATest is Test {
         testSizes[2] = 100;
         testSizes[3] = 150;
         testSizes[4] = 200;
-        
+
         console2.log("\n--- Gas usage projection for different batch sizes ---");
         for (uint256 i = 0; i < testSizes.length; i++) {
             uint256 projectedGas = (gasUsed * testSizes[i]) / numUsers;
             uint256 percentOfBlock = (projectedGas * 100) / berachainBlockGasLimit;
-            console2.log("Users: %d, Projected gas: %d (%d%% of block limit)", 
-                testSizes[i], projectedGas, percentOfBlock);
+            console2.log(
+                "Users: %d, Projected gas: %d (%d%% of block limit)", testSizes[i], projectedGas, percentOfBlock
+            );
         }
-        
+
         // Safety assertions
         assertTrue(gasUsed < berachainBlockGasLimit / 2, "Gas usage should be less than 50% of block limit");
         assertTrue(gasUsed < 15_000_000, "Gas usage should be less than 15M gas for 100 users");
-        
+
         console2.log("\nGas usage test completed - fulfillBatch is safe for %d users", numUsers);
-        
+
         // Verify functionality still works
-        for (uint256 i = 0; i < 10; i++) { // Test first 10 users for functionality
+        for (uint256 i = 0; i < 10; i++) {
+            // Test first 10 users for functionality
             uint256 expectedClaimable = FixedPointMathLib.fullMulDiv(withdrawAmount, netAmount, totalWithdrawAmount);
             assertApproxEqAbs(vault.claimable(users[i]), expectedClaimable, 1, "Claimable amount should be correct");
         }
@@ -2776,55 +2815,56 @@ contract fatBERATest is Test {
         // Test the current maxUsersPerBatch limit to ensure it's safe
         uint256 maxUsers = vault.maxUsersPerBatch();
         console2.log("\n=== GAS USAGE TEST: fulfillBatch with maxUsersPerBatch (%d users) ===", maxUsers);
-        
+
         uint256 depositAmount = 5e18;
         uint256 withdrawAmount = 4e18;
-        
+
         // Setup users
         for (uint256 i = 0; i < maxUsers; i++) {
             address user = makeAddr(string.concat("maxTestUser", vm.toString(i)));
             wbera.mint(user, depositAmount);
-            
+
             vm.prank(user);
             wbera.approve(address(vault), depositAmount);
-            
+
             vm.prank(user);
             vault.deposit(depositAmount, user);
-            
+
             vm.prank(user);
             vault.requestWithdraw(withdrawAmount);
         }
-        
+
         // Start batch
         vm.prank(fulfiller);
         vault.startWithdrawalBatch();
-        
+
         // Setup for fulfillment
         uint256 totalWithdrawAmount = maxUsers * withdrawAmount;
         uint256 fee = totalWithdrawAmount * 3 / 100; // 3% fee
         uint256 netAmount = totalWithdrawAmount - fee;
-        
+
         wbera.mint(fulfiller, netAmount);
         vm.prank(fulfiller);
         wbera.approve(address(vault), netAmount);
-        
+
         // Measure gas
         vm.prank(fulfiller);
         uint256 gasStart = gasleft();
         vault.fulfillBatch(1, fee);
         uint256 gasUsed = gasStart - gasleft();
-        
+
         console2.log("Gas used for fulfillBatch with maxUsersPerBatch (%d): %d", maxUsers, gasUsed);
         console2.log("Gas per user: %d", gasUsed / maxUsers);
-        
+
         uint256 berachainBlockGasLimit = 30_000_000;
         uint256 percentOfBlock = (gasUsed * 100) / berachainBlockGasLimit;
         console2.log("Gas usage as %% of Berachain block limit: %d%%", percentOfBlock);
-        
+
         // Safety check - should use less than 30% of block gas limit
-        assertTrue(gasUsed < berachainBlockGasLimit * 30 / 100, 
-            "fulfillBatch should use less than 30% of block gas limit");
-        
+        assertTrue(
+            gasUsed < berachainBlockGasLimit * 30 / 100, "fulfillBatch should use less than 30% of block gas limit"
+        );
+
         console2.log("maxUsersPerBatch (%d) is safe for gas usage", maxUsers);
     }
 
@@ -2833,67 +2873,67 @@ contract fatBERATest is Test {
         vm.startPrank(admin);
         vault.setMaxUsersPerBatch(151);
         vm.stopPrank();
-        
+
         // Test different batch sizes for gas optimization
         uint256[] memory batchSizes = new uint256[](4);
         batchSizes[0] = 50;
         batchSizes[1] = 100;
         batchSizes[2] = 150;
         batchSizes[3] = vault.maxUsersPerBatch(); // Current max
-        
+
         uint256 depositAmount = 5e18;
         uint256 withdrawAmount = 4e18;
         uint256 berachainBlockGasLimit = 30_000_000;
-        
+
         console2.log("Testing batch sizes for gas optimization...");
         console2.log("Target: <20% of block gas limit for safety margin");
         console2.log("Berachain block gas limit:");
         console2.log(berachainBlockGasLimit);
-        
+
         for (uint256 j = 0; j < batchSizes.length; j++) {
             uint256 batchSize = batchSizes[j];
-            
+
             console2.log("--- Testing batch size (users):");
             console2.log(batchSize);
-            
+
             // Setup users for this batch size
             for (uint256 i = 0; i < batchSize; i++) {
                 address user = address(uint160(0x2000 + j * 1000 + i)); // Unique addresses per test
                 wbera.mint(user, depositAmount);
-                
+
                 vm.prank(user);
                 wbera.approve(address(vault), depositAmount);
-                
+
                 vm.prank(user);
                 vault.deposit(depositAmount, user);
-                
+
                 vm.prank(user);
                 vault.requestWithdraw(withdrawAmount);
             }
-            
+
             // Start batch
             vm.prank(fulfiller);
             (uint256 batchId,) = vault.startWithdrawalBatch();
-            
+
             // Setup for fulfillment
             uint256 totalWithdrawAmount = batchSize * withdrawAmount;
             uint256 fee = totalWithdrawAmount * 2 / 100;
             uint256 netAmount = totalWithdrawAmount - fee;
-            
+
             wbera.mint(fulfiller, netAmount);
             vm.prank(fulfiller);
             wbera.approve(address(vault), netAmount);
-            
+
             // Measure gas usage
             uint256 gasStart = gasleft();
             vm.prank(fulfiller);
             vault.fulfillBatch(batchId, fee);
             uint256 gasUsed = gasStart - gasleft();
-            
+
             // Calculate percentage of block gas limit
             uint256 percentOfBlock = (gasUsed * 100) / berachainBlockGasLimit;
             uint256 gasPerUser = gasUsed / batchSize;
-            
+
             console2.log("Batch size:");
             console2.log(batchSize);
             console2.log("Gas used:");
@@ -2902,10 +2942,10 @@ contract fatBERATest is Test {
             console2.log(gasPerUser);
             console2.log("Block usage (%):");
             console2.log(percentOfBlock);
-            
+
             // Safety assertions
             assertTrue(percentOfBlock < 50, "Gas usage too high - over 50% of block limit");
-            
+
             if (percentOfBlock <= 20) {
                 console2.log("SAFE - Under 20% block limit");
             } else if (percentOfBlock <= 30) {
@@ -2914,12 +2954,10 @@ contract fatBERATest is Test {
                 console2.log("HIGH - Over 30% block limit");
             }
         }
-        
+
         console2.log("=== RECOMMENDATIONS ===");
         console2.log("Current maxUsersPerBatch:");
         console2.log(vault.maxUsersPerBatch());
         console2.log("Recommendation: Use largest batch size that stays under 20% of block gas limit");
     }
 }
-
-

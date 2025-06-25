@@ -320,7 +320,7 @@ contract fatBERAV2 is
      * should not accrue rewards.
      */
     function setWhitelistedVault(address vaultAddress, bool status) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (!isWhitelistedVault[vaultAddress]){
+        if (!isWhitelistedVault[vaultAddress]) {
             _updateRewards(vaultAddress);
         }
         isWhitelistedVault[vaultAddress] = status;
@@ -643,10 +643,10 @@ contract fatBERAV2 is
         if (shares == 0) revert ZeroShares();
 
         Batch storage currentBatch = batches[currentBatchId];
-        
+
         // If current batch is frozen, we can't add to it
         if (currentBatch.frozen) revert BatchFrozen();
-        
+
         // If adding this user would exceed the limit, reject the request
         if (currentBatch.users.length >= maxUsersPerBatch) {
             revert ExceedsMaxUsersPerBatch();
@@ -654,7 +654,7 @@ contract fatBERAV2 is
 
         _updateRewards(msg.sender);
         _burn(msg.sender, shares);
-        
+
         currentBatch.users.push(msg.sender);
         currentBatch.amounts.push(shares);
         currentBatch.total += shares;
@@ -670,7 +670,11 @@ contract fatBERAV2 is
      * @return batchId The ID of the batch that was started.
      * @return total The total amount of shares in the batch.
      */
-    function startWithdrawalBatch() external onlyRole(WITHDRAW_FULFILLER_ROLE) returns (uint256 batchId, uint256 total) {
+    function startWithdrawalBatch()
+        external
+        onlyRole(WITHDRAW_FULFILLER_ROLE)
+        returns (uint256 batchId, uint256 total)
+    {
         Batch storage b = batches[currentBatchId];
         if (b.frozen) revert BatchAlreadyFrozen();
         if (b.total == 0) revert BatchEmpty();
@@ -678,7 +682,7 @@ contract fatBERAV2 is
         b.frozen = true;
         batchId = currentBatchId;
         total = b.total;
-        
+
         emit BatchStarted(batchId, total);
 
         currentBatchId++;

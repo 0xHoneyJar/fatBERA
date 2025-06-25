@@ -264,7 +264,7 @@ contract fatBERA is
      * should not accrue rewards.
      */
     function setWhitelistedVault(address vaultAddress, bool status) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (!isWhitelistedVault[vaultAddress]){
+        if (!isWhitelistedVault[vaultAddress]) {
             _updateRewards(vaultAddress);
         }
         isWhitelistedVault[vaultAddress] = status;
@@ -390,6 +390,7 @@ contract fatBERA is
      * @param receiver The address receiving the claimed rewards.
      * @dev Updates rewards prior to claiming and resets the user's reward balance.
      */
+
     function claimRewards(address token, address receiver) public nonReentrant {
         _updateRewards(msg.sender, token);
 
@@ -457,7 +458,7 @@ contract fatBERA is
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          VIEW LOGIC                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-    
+
     /**
      * @notice Simulates the effects of withdrawing assets at the current block.
      * @return Returns 0 if paused, otherwise returns the standard ERC4626 preview calculation.
