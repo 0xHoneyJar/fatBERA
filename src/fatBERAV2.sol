@@ -718,9 +718,12 @@ contract fatBERAV2 is
             emit WithdrawalFulfilled(u, batchId, userAmount);
         }
 
-        // handle any tiny remainder due to rounding and add to depositPrincipal for extra validator staking
+        // handle any tiny remainder due to rounding by giving it to the last user
         uint256 remainder = net - sumClaimed;
-        depositPrincipal += remainder;
+        if (remainder > 0 && b.users.length > 0) {
+            address lastUser = b.users[b.users.length - 1];
+            claimable[lastUser] += remainder;
+        }
 
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), net);
     }
