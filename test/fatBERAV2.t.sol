@@ -1625,12 +1625,12 @@ contract fatBERATest is Test {
         assertEq(vault.claimable(alice), 0, "Alice should have claimed all");
     }
 
-    function test_RequestWithdrawRevertsZeroShares() public {
+    function test_RequestWithdrawRevertsBelowMinimumWithdraw() public {
         vm.prank(alice);
         vault.deposit(100e18, alice);
 
         vm.prank(alice);
-        vm.expectRevert(fatBERAV2.ZeroShares.selector);
+        vm.expectRevert(fatBERAV2.BelowMinimumWithdraw.selector);
         vault.requestWithdraw(0);
     }
 
@@ -1914,7 +1914,9 @@ contract fatBERATest is Test {
         depositAmount = bound(depositAmount, 1e18, 1000e18);
         withdrawAmount = bound(withdrawAmount, 1, depositAmount);
         feePercent = bound(feePercent, 0, 500); // 0-5%
-
+        vm.prank(admin);
+        vault.setMinWithdrawAmount(1);
+        
         // Setup
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -2337,6 +2339,9 @@ contract fatBERATest is Test {
     }
 
     function test_RoundingEdgeCasesWithSmallAmounts() public {
+        vm.prank(admin);
+        vault.setMinWithdrawAmount(1);
+
         // Test with very small amounts to check rounding behavior
         vm.prank(alice);
         vault.deposit(3, alice); // 3 wei
