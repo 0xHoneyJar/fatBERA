@@ -106,7 +106,7 @@ contract fatBERAV2 is
     // --- Withdrawal batching state ---
     struct Batch {
         address[] users;
-        uint256[] amounts;
+        mapping(address => uint256) amounts;
         bool frozen;
         bool fulfilled;
         uint256 total;
@@ -654,21 +654,27 @@ contract fatBERAV2 is
      *         Burns your shares and settles rewards.
      */
     function requestWithdraw(uint256 shares) external nonReentrant {
-        if (shares < minWithdrawAmount) revert BelowMinimumWithdraw();
-
         Batch storage currentBatch = batches[currentBatchId];
 
         if (currentBatch.frozen) revert BatchFrozen();
-        if (currentBatch.users.length >= maxUsersPerBatch) {
-            revert ExceedsMaxUsersPerBatch();
-        }
 
         _updateRewards(msg.sender);
         _burn(msg.sender, shares);
 
-        currentBatch.users.push(msg.sender);
-        currentBatch.amounts.push(shares);
+        // Only push the user to the array if they haven't been added before
+        if(currentBatch.amounts[msg.sender] == 0) {
+            currentBatch.users.push(msg.sender);
+        }
+        currentBatch.amounts[msg.sender] += shares;
         currentBatch.total += shares;
+
+        // Check minimum withdrawal amount after accounting for the request
+        if (currentBatch.amounts[msg.sender] < minWithdrawAmount) revert BelowMinimumWithdraw();
+        
+        // Check max users per batch only if this is a new user
+        if (currentBatch.users.length > maxUsersPerBatch) {
+            revert ExceedsMaxUsersPerBatch();
+        }
 
         pending[msg.sender] += shares;
         totalPending += shares;
@@ -722,7 +728,7 @@ contract fatBERAV2 is
         uint256 sumClaimed;
         for (uint256 i = 0; i < b.users.length; i++) {
             address u = b.users[i];
-            uint256 a = b.amounts[i];
+            uint256 a = b.amounts[u];
 
             uint256 userAmount = FixedPointMathLib.fullMulDiv(a, net, totalShares);
 
