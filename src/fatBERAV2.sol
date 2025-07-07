@@ -653,7 +653,7 @@ contract fatBERAV2 is
      * @notice Queue yourself into the *current* unstake batch.
      *         Burns your shares and settles rewards.
      */
-    function requestWithdraw(uint256 shares) external nonReentrant {
+    function requestWithdraw(uint256 shares) external nonReentrant whenNotPaused {
         Batch storage currentBatch = batches[currentBatchId];
 
         if (currentBatch.frozen) revert BatchFrozen();

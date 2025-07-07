@@ -104,6 +104,7 @@ contract fatBERATest is Test {
         vault.setRewardsDuration(address(wbera), 7 days);
         vault.setRewardsDuration(address(rewardToken1), 7 days);
         vault.setRewardsDuration(address(rewardToken2), 7 days);
+        vault.unpause();
         vm.stopPrank();
     }
 
@@ -117,7 +118,7 @@ contract fatBERATest is Test {
         // Check roles instead of owner
         assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin), "Admin should have DEFAULT_ADMIN_ROLE");
         assertEq(address(vault.asset()), address(wbera));
-        assertEq(vault.paused(), true);
+        assertEq(vault.paused(), false);
         (uint256 rewardPerShareStored, uint256 totalRewards,,,,,) = vault.rewardData(address(wbera));
         assertEq(rewardPerShareStored, 0);
         assertEq(totalRewards, 0);
@@ -225,10 +226,7 @@ contract fatBERATest is Test {
         );
     }
 
-    function test_MultipleDepositorsRewardDistribution() public {
-        vm.prank(admin);
-        vault.unpause();
-
+    function test_MultipleDepositorsRewardDistribution() public {   
         // Alice deposits 100 WBERA
         vm.prank(alice);
         vault.deposit(100e18, alice);
@@ -256,9 +254,6 @@ contract fatBERATest is Test {
     }
 
     function test_ClaimRewards() public {
-        vm.prank(admin);
-        vault.unpause();
-
         // Alice deposits
         vm.prank(alice);
         vault.deposit(100e18, alice);
@@ -279,9 +274,6 @@ contract fatBERATest is Test {
     }
 
     function test_OwnerWithdrawPrincipal() public {
-        vm.prank(admin);
-        vault.unpause();
-
         // Alice deposits
         vm.prank(alice);
         vault.deposit(100e18, alice);
@@ -298,9 +290,6 @@ contract fatBERATest is Test {
     }
 
     function test_MultipleRewardCycles() public {
-        vm.prank(admin);
-        vault.unpause();
-
         // Alice and Bob deposit
         vm.prank(alice);
         vault.deposit(100e18, alice);
@@ -980,11 +969,11 @@ contract fatBERATest is Test {
 
         // Admin attempts should succeed
         vm.startPrank(admin);
-        vault.unpause();
-        assertTrue(!vault.paused(), "Vault should be unpaused");
-
         vault.pause();
         assertTrue(vault.paused(), "Vault should be paused");
+
+        vault.unpause();
+        assertTrue(!vault.paused(), "Vault should be unpaused");
         vm.stopPrank();
     }
 
@@ -1027,9 +1016,6 @@ contract fatBERATest is Test {
      * that the accrued rewards match the expected proportion.
      */
     function test_PartialTimeRewardAccrual() public {
-        // Unpause the vault so that deposits are permitted.
-        vm.prank(admin);
-        vault.unpause();
 
         // Alice deposits 100 tokens.
         vm.prank(alice);
@@ -1062,9 +1048,6 @@ contract fatBERATest is Test {
      * and that further time passage does not increase rewards beyond the notified amount.
      */
     function test_FullTimeRewardAccrual() public {
-        vm.prank(admin);
-        vault.unpause();
-
         vm.prank(alice);
         vault.deposit(100e18, alice);
 
@@ -1094,9 +1077,6 @@ contract fatBERATest is Test {
      * and a partial accrual of the second reward.
      */
     function test_CumulativeTimeBasedRewards() public {
-        vm.prank(admin);
-        vault.unpause();
-
         // Alice deposits 100 tokens.
         vm.prank(alice);
         vault.deposit(100e18, alice);
@@ -1139,10 +1119,6 @@ contract fatBERATest is Test {
      * Withdrawals are disabled, so previewRewards() is used to verify the minimal reward accumulation.
      */
     function test_SandwichAttackMitigation() public {
-        // Unpause the vault to allow deposits.
-        vm.prank(admin);
-        vault.unpause();
-
         // --- Attacker deposits borrowed WBERA before the reward is notified ---
         uint256 attackerDeposit = 100e18;
         vm.prank(bob);
@@ -1321,10 +1297,6 @@ contract fatBERATest is Test {
     }
 
     function test_RewardSimulationScenario1() public {
-        // Initial setup
-        vm.prank(admin);
-        vault.unpause();
-
         address userA = makeAddr("userA");
         address userB = makeAddr("userB");
 
@@ -1389,10 +1361,6 @@ contract fatBERATest is Test {
     }
 
     function test_RewardSimulationScenario2() public {
-        // Initial setup
-        vm.prank(admin);
-        vault.unpause();
-
         address userA = makeAddr("userA");
         address userB = makeAddr("userB");
 
