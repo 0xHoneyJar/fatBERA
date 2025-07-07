@@ -1916,7 +1916,7 @@ contract fatBERATest is Test {
         feePercent = bound(feePercent, 0, 500); // 0-5%
         vm.prank(admin);
         vault.setMinWithdrawAmount(1);
-        
+
         // Setup
         vm.prank(alice);
         vault.deposit(depositAmount, alice);

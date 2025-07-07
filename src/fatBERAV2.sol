@@ -662,7 +662,7 @@ contract fatBERAV2 is
         _burn(msg.sender, shares);
 
         // Only push the user to the array if they haven't been added before
-        if(currentBatch.amounts[msg.sender] == 0) {
+        if (currentBatch.amounts[msg.sender] == 0) {
             currentBatch.users.push(msg.sender);
         }
         currentBatch.amounts[msg.sender] += shares;
@@ -670,7 +670,7 @@ contract fatBERAV2 is
 
         // Check minimum withdrawal amount after accounting for the request
         if (currentBatch.amounts[msg.sender] < minWithdrawAmount) revert BelowMinimumWithdraw();
-        
+
         // Check max users per batch only if this is a new user
         if (currentBatch.users.length > maxUsersPerBatch) {
             revert ExceedsMaxUsersPerBatch();
