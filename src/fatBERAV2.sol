@@ -167,7 +167,7 @@ contract fatBERAV2 is
     /**
      * @notice Reinitializer for V2: sets up batch counter and the withdraw fulfiller role.
      * @param withdrawFulfiller The multisig address that will call fulfillBatch.
-     * @dev Use `reinitializer(2)` so this runs exactly once, after the original initializer.
+     * @dev Assumes that `initialize()` has already been called. Use `reinitializer(2)` so this runs exactly once.
      * @custom:oz-upgrades-validate-as-initializer
      */
     function initializeV2(address withdrawFulfiller) external reinitializer(2) {
