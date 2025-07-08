@@ -736,14 +736,16 @@ contract fatBERAV2 is
             claimable[u] += userAmount;
             sumClaimed += userAmount;
 
-            emit WithdrawalFulfilled(u, batchId, userAmount);
-        }
+            if (i == b.users.length - 1) {
+                // handle any tiny remainder due to rounding by giving it to the last user
+                uint256 remainder = net - sumClaimed;
+                if (remainder > 0) {
+                    address lastUser = b.users[b.users.length - 1];
+                    claimable[lastUser] += remainder;
+                }
+            }
 
-        // handle any tiny remainder due to rounding by giving it to the last user
-        uint256 remainder = net - sumClaimed;
-        if (remainder > 0 && b.users.length > 0) {
-            address lastUser = b.users[b.users.length - 1];
-            claimable[lastUser] += remainder;
+            emit WithdrawalFulfilled(u, batchId, userAmount);
         }
 
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), net);
