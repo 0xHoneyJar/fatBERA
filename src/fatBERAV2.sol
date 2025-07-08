@@ -742,6 +742,7 @@ contract fatBERAV2 is
                 if (remainder > 0) {
                     address lastUser = b.users[b.users.length - 1];
                     claimable[lastUser] += remainder;
+                    userAmount += remainder;
                 }
             }
 
