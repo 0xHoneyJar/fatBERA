@@ -58,6 +58,10 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     error SafeNotAuthorized();
     error ZeroAddress();
     error ZeroAmount();
+    error StartWithdrawalBatchDisabled();
+    error RequestValidatorWithdrawalDisabled();
+    error WithdrawalAmountTooLow();
+    error ValidatorKeyNotWhitelisted();
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          EVENTS                            */
@@ -79,6 +83,8 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
 
     event TriggerUpdated(address indexed oldTrigger, address indexed newTrigger);
     event SafeConfigured(address indexed safe, address indexed fatBERA, bytes cometBFTPublicKey);
+    event StartWithdrawalBatchToggled(bool enabled);
+    event RequestValidatorWithdrawalToggled(bool enabled);
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STORAGE                           */
@@ -96,6 +102,14 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     }
 
     mapping(address => SafeConfig) public safeConfigs;
+    
+    // Validator key whitelist per Safe
+    mapping(address => mapping(bytes32 => bool)) public whitelistedValidatorKeys;
+    mapping(address => bytes32[]) public safeValidatorKeys;
+
+    // Function toggles for security control
+    bool public startWithdrawalBatchEnabled = true;
+    bool public requestValidatorWithdrawalEnabled = true;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          CONSTRUCTOR                       */
@@ -118,13 +132,55 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @param safe The Safe contract address
      * @param fatBERAContract The fatBERA contract address for this Safe
      */
-    function configureSafe(address safe, address fatBERAContract) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function configureSafe(address safe, address fatBERAContract) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
         if (safe == address(0)) revert ZeroAddress();
         if (fatBERAContract == address(0)) revert InvalidFatBERAContract();
 
         safeConfigs[safe] = SafeConfig({fatBERAContract: fatBERAContract, isConfigured: true});
 
         emit SafeConfigured(safe, fatBERAContract, "");
+    }
+
+    /**
+     * @notice Add a validator key to the whitelist for a Safe
+     * @param safe The Safe contract address
+     * @param validatorKey The CometBFT public key to whitelist
+     */
+    function addValidatorKey(address safe, bytes calldata validatorKey) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (!safeConfigs[safe].isConfigured) revert UnauthorizedSafe();
+        if (validatorKey.length == 0) revert InvalidCometBFTPublicKey();
+        
+        bytes32 keyHash = keccak256(validatorKey);
+        if (!whitelistedValidatorKeys[safe][keyHash]) {
+            whitelistedValidatorKeys[safe][keyHash] = true;
+            safeValidatorKeys[safe].push(keyHash);
+        }
+    }
+
+    /**
+     * @notice Remove a validator key from the whitelist for a Safe
+     * @param safe The Safe contract address
+     * @param validatorKey The CometBFT public key to remove
+     */
+    function removeValidatorKey(address safe, bytes calldata validatorKey) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (!safeConfigs[safe].isConfigured) revert UnauthorizedSafe();
+        if (validatorKey.length == 0) revert InvalidCometBFTPublicKey();
+        
+        bytes32 keyHash = keccak256(validatorKey);
+        whitelistedValidatorKeys[safe][keyHash] = false;
+        
+        // Remove from array
+        bytes32[] storage keys = safeValidatorKeys[safe];
+        for (uint256 i = 0; i < keys.length; i++) {
+            if (keys[i] == keyHash) {
+                keys[i] = keys[keys.length - 1];
+                keys.pop();
+                break;
+            }
+        }
     }
 
     /**
@@ -146,6 +202,24 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         emit TriggerUpdated(trigger, address(0));
     }
 
+    /**
+     * @notice Enable or disable the startWithdrawalBatch function
+     * @param enabled True to enable, false to disable
+     */
+    function setStartWithdrawalBatchEnabled(bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        startWithdrawalBatchEnabled = enabled;
+        emit StartWithdrawalBatchToggled(enabled);
+    }
+
+    /**
+     * @notice Enable or disable the requestValidatorWithdrawal function
+     * @param enabled True to enable, false to disable
+     */
+    function setRequestValidatorWithdrawalEnabled(bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        requestValidatorWithdrawalEnabled = enabled;
+        emit RequestValidatorWithdrawalToggled(enabled);
+    }
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                        TRIGGER FUNCTIONS                   */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -162,6 +236,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         nonReentrant
         returns (uint256 batchId, uint256 totalAmount)
     {
+        if (!startWithdrawalBatchEnabled) revert StartWithdrawalBatchDisabled();
         return _startWithdrawalBatch(safe);
     }
 
@@ -176,6 +251,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         onlyRole(TRIGGER_ROLE)
         nonReentrant
     {
+        if (!requestValidatorWithdrawalEnabled) revert RequestValidatorWithdrawalDisabled();
         _requestValidatorWithdrawal(safe, withdrawAmount, cometBFTPublicKey);
     }
 
@@ -256,24 +332,49 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         SafeConfig memory config = safeConfigs[safe];
         if (!config.isConfigured) revert UnauthorizedSafe();
         if (withdrawAmount == 0) revert ZeroAmount();
+        
+        // Key validation - only allow whitelisted keys
         if (cometBFTPublicKey.length == 0) revert InvalidCometBFTPublicKey();
+        
+        // SECURITY: Check if key is whitelisted for this Safe
+        // This prevents compromised triggers from using malicious keys
+        bytes32 keyHash = keccak256(cometBFTPublicKey);
+        if (!whitelistedValidatorKeys[safe][keyHash]) revert ValidatorKeyNotWhitelisted();
 
-        // Get the current withdrawal fee
+        // Get the current withdrawal fee (confirmed to be in WEI based on Berachain docs)
+        // Documentation shows fee is used as --value ${WITHDRAW_FEE}wei, so response is in WEI
         (bool success, bytes memory returnData) = BERACHAIN_WITHDRAW_CONTRACT.staticcall("");
         if (!success) revert TransactionFailed();
-        uint256 withdrawFee = abi.decode(returnData, (uint256));
+        uint256 withdrawFeeWei = abi.decode(returnData, (uint256));
 
-        // Encode the withdrawal request
-        bytes memory withdrawRequest = abi.encodePacked(cometBFTPublicKey, withdrawAmount);
+        // Ensure withdrawal amount is greater than fee to avoid zero/negative net withdrawal
+        // Also prevents accidental validator exit (withdrawAmount = 0 exits validator entirely)
+        if (withdrawAmount <= withdrawFeeWei) revert WithdrawalAmountTooLow();
+
+        // Subtract fee from withdrawal amount since fatBERA.fulfillBatch() already accounts for the fee
+        // This ensures we get exactly (withdrawAmount - withdrawFeeWei) net from the validator
+        uint256 adjustedWithdrawAmountWei = withdrawAmount - withdrawFeeWei;
+
+        // Convert from WEI to GWEI as required by Berachain withdraw contract
+        // fatBERAV2 returns amounts in WEI, but Berachain expects GWEI (uint64)
+        // Use ceiling division to ensure we always request at least the amount needed
+        uint256 adjustedWithdrawAmountGwei = (adjustedWithdrawAmountWei + 1e9 - 1) / 1e9;
+        
+        // Ensure the GWEI amount fits in uint64
+        if (adjustedWithdrawAmountGwei > type(uint64).max) revert InvalidWithdrawAmount();
+
+        // Encode the withdrawal request according to Berachain docs: (bytes,uint64)
+        bytes memory withdrawRequest = abi.encodePacked(cometBFTPublicKey, uint64(adjustedWithdrawAmountGwei));
 
         // Execute the validator withdrawal request via Safe
+        // Fee is paid as msg.value in WEI
         success = ISafe(safe).execTransactionFromModule(
-            BERACHAIN_WITHDRAW_CONTRACT, withdrawFee, withdrawRequest, Enum.Operation.Call
+            BERACHAIN_WITHDRAW_CONTRACT, withdrawFeeWei, withdrawRequest, Enum.Operation.Call
         );
 
         if (!success) revert TransactionFailed();
 
-        emit ValidatorWithdrawalRequested(safe, msg.sender, cometBFTPublicKey, withdrawAmount, withdrawFee);
+        emit ValidatorWithdrawalRequested(safe, msg.sender, cometBFTPublicKey, adjustedWithdrawAmountWei, withdrawFeeWei);
     }
 
     /**
@@ -340,5 +441,25 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      */
     function isSafeConfigured(address safe) external view returns (bool) {
         return safeConfigs[safe].isConfigured;
+    }
+
+    /**
+     * @notice Check if a validator key is whitelisted for a Safe
+     * @param safe The Safe contract address
+     * @param validatorKey The CometBFT public key to check
+     * @return True if the key is whitelisted
+     */
+    function isValidatorKeyWhitelisted(address safe, bytes calldata validatorKey) external view returns (bool) {
+        bytes32 keyHash = keccak256(validatorKey);
+        return whitelistedValidatorKeys[safe][keyHash];
+    }
+
+    /**
+     * @notice Get all whitelisted validator keys for a Safe
+     * @param safe The Safe contract address
+     * @return Array of whitelisted validator key hashes
+     */
+    function getWhitelistedValidatorKeys(address safe) external view returns (bytes32[] memory) {
+        return safeValidatorKeys[safe];
     }
 }
