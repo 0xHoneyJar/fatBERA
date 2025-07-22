@@ -33,6 +33,14 @@ interface IFatBERAV2 {
         external
         view
         returns (address[] memory users, uint256[] memory amounts, bool frozen, bool fulfilled, uint256 total);
+    function asset() external view returns (address);
+}
+
+/// @dev WBERA interface for wrapping native BERA
+interface IWBERA {
+    function deposit() external payable;
+    function approve(address spender, uint256 amount) external returns (bool);
+    function balanceOf(address owner) external view returns (uint256);
 }
 
 /**
@@ -62,6 +70,9 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     error RequestValidatorWithdrawalDisabled();
     error WithdrawalAmountTooLow();
     error ValidatorKeyNotWhitelisted();
+    error InsufficientNativeBalance();
+    error WrapFailed();
+    error ApproveFailed();
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          EVENTS                            */
@@ -85,6 +96,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     event SafeConfigured(address indexed safe, address indexed fatBERA, bytes cometBFTPublicKey);
     event StartWithdrawalBatchToggled(bool enabled);
     event RequestValidatorWithdrawalToggled(bool enabled);
+    event NativeBeraWrapped(address indexed safe, uint256 amount);
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STORAGE                           */
@@ -94,6 +106,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
 
     // Berachain constants
     address public constant BERACHAIN_WITHDRAW_CONTRACT = 0x00000961Ef480Eb55e80D19ad83579A64c007002;
+    address public constant WBERA_ADDRESS = 0x6969696969696969696969696969696969696969;
 
     // Safe-specific configurations
     struct SafeConfig {
@@ -382,6 +395,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
      * @param safe The Safe contract address
      * @param batchId The batch ID to fulfill
      * @param fee The withdrawal fee to deduct
+     * @dev This function wraps native BERA to WBERA, approves the fatBERA contract, then fulfills the batch
      */
     function fulfillWithdrawalBatch(address safe, uint256 batchId, uint256 fee)
         external
@@ -391,12 +405,54 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         SafeConfig memory config = safeConfigs[safe];
         if (!config.isConfigured) revert UnauthorizedSafe();
 
-        // Encode the call to fulfillBatch
-        bytes memory data = abi.encodeWithSelector(IFatBERAV2.fulfillBatch.selector, batchId, fee);
+        // Get batch info to calculate exact amount needed
+        IFatBERAV2 fatBERA = IFatBERAV2(config.fatBERAContract);
+        (,,,, uint256 totalShares) = fatBERA.batches(batchId);
+        uint256 netAmount = totalShares - fee;
 
-        // Execute via Safe module
-        bool success = ISafe(safe).execTransactionFromModule(config.fatBERAContract, 0, data, Enum.Operation.Call);
+        if (netAmount == 0) revert ZeroAmount();
 
+        // Step 1: Wrap native BERA to WBERA
+        bytes memory wrapData = abi.encodeWithSelector(IWBERA.deposit.selector);
+        
+        bool success = ISafe(safe).execTransactionFromModule(
+            WBERA_ADDRESS,
+            netAmount, // Send native BERA as msg.value
+            wrapData,
+            Enum.Operation.Call
+        );
+        if (!success) revert WrapFailed();
+
+        emit NativeBeraWrapped(safe, netAmount);
+
+        // Step 2: Approve fatBERA contract to spend WBERA
+        bytes memory approveData = abi.encodeWithSelector(
+            IWBERA.approve.selector,
+            config.fatBERAContract,
+            netAmount
+        );
+        
+        success = ISafe(safe).execTransactionFromModule(
+            WBERA_ADDRESS,
+            0,
+            approveData,
+            Enum.Operation.Call
+        );
+        if (!success) revert ApproveFailed();
+
+        // Step 3: Fulfill the batch
+        bytes memory fulfillData = abi.encodeWithSelector(
+            IFatBERAV2.fulfillBatch.selector,
+            batchId,
+            fee
+        );
+        
+        success = ISafe(safe).execTransactionFromModule(
+            config.fatBERAContract,
+            0,
+            fulfillData,
+            Enum.Operation.Call
+        );
         if (!success) revert TransactionFailed();
 
         emit BatchFulfilled(safe, msg.sender, batchId, fee);

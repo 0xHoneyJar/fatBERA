@@ -2933,4 +2933,163 @@ contract fatBERATest is Test {
         console2.log(vault.maxUsersPerBatch());
         console2.log("Recommendation: Use largest batch size that stays under 20% of block gas limit");
     }
+
+    function test_OptimalMaxUsersPerBatch() public {
+        console2.log("\n=== OPTIMAL MAX USERS PER BATCH ANALYSIS ===");
+        
+        // Berachain block gas limit
+        uint256 berachainBlockGasLimit = 30_000_000;
+        
+        // Target: Use no more than 20% of block gas limit for safety
+        uint256 targetGasLimit = berachainBlockGasLimit * 20 / 100; // 6,000,000 gas
+        
+        console2.log("Berachain block gas limit: %d", berachainBlockGasLimit);
+        console2.log("Target gas limit (20%%): %d", targetGasLimit);
+        console2.log("Testing batch sizes to find optimal maxUsersPerBatch...");
+        
+        // Test different batch sizes
+        uint256[] memory batchSizes = new uint256[](8);
+        batchSizes[0] = 25;
+        batchSizes[1] = 50;
+        batchSizes[2] = 75;
+        batchSizes[3] = 100;
+        batchSizes[4] = 125;
+        batchSizes[5] = 150;
+        batchSizes[6] = 175;
+        batchSizes[7] = 200;
+        
+        uint256 depositAmount = 10e18;
+        uint256 withdrawAmount = 8e18;
+        
+        uint256 optimalBatchSize = 0;
+        uint256 optimalGasPerUser = 0;
+        
+        for (uint256 i = 0; i < batchSizes.length; i++) {
+            uint256 batchSize = batchSizes[i];
+            
+            // Setup users for this batch size
+            for (uint256 j = 0; j < batchSize; j++) {
+                address user = address(uint160(0x3000 + i * 1000 + j)); // Unique addresses
+                wbera.mint(user, depositAmount);
+                
+                vm.prank(user);
+                wbera.approve(address(vault), depositAmount);
+                
+                vm.prank(user);
+                vault.deposit(depositAmount, user);
+                
+                vm.prank(user);
+                vault.requestWithdraw(withdrawAmount);
+            }
+            
+            // Start batch
+            vm.prank(fulfiller);
+            (uint256 batchId,) = vault.startWithdrawalBatch();
+            
+            // Setup for fulfillment
+            uint256 totalWithdrawAmount = batchSize * withdrawAmount;
+            uint256 fee = totalWithdrawAmount * 1 / 100; // 1% fee
+            uint256 netAmount = totalWithdrawAmount - fee;
+            
+            wbera.mint(fulfiller, netAmount);
+            vm.prank(fulfiller);
+            wbera.approve(address(vault), netAmount);
+            
+            // Measure gas usage
+            uint256 gasStart = gasleft();
+            vm.prank(fulfiller);
+            vault.fulfillBatch(batchId, fee);
+            uint256 gasUsed = gasStart - gasleft();
+            
+            uint256 gasPerUser = gasUsed / batchSize;
+            uint256 percentOfBlock = (gasUsed * 100) / berachainBlockGasLimit;
+            
+            console2.log("\n--- Batch Size: %d ---", batchSize);
+            console2.log("Total gas used: %d", gasUsed);
+            console2.log("Gas per user: %d", gasPerUser);
+            console2.log("Block usage: %d%%", percentOfBlock);
+            
+            // Check if this batch size is within target
+            if (gasUsed <= targetGasLimit) {
+                console2.log("SAFE - Within 20% target");
+                optimalBatchSize = batchSize;
+                optimalGasPerUser = gasPerUser;
+            } else {
+                console2.log("EXCEEDS - Over 20% target");
+            }
+            
+            // Clean up for next test
+            vm.prank(admin);
+            vault.setMaxUsersPerBatch(200); // Reset to allow larger batches
+        }
+        
+        console2.log("\n=== OPTIMAL BATCH SIZE RECOMMENDATION ===");
+        console2.log("Recommended maxUsersPerBatch: %d", optimalBatchSize);
+        console2.log("Gas per user at optimal size: %d", optimalGasPerUser);
+        console2.log("Estimated gas for optimal batch: %d", optimalBatchSize * optimalGasPerUser);
+        
+        // Additional safety analysis
+        console2.log("\n=== SAFETY ANALYSIS ===");
+        console2.log("Current setting (100 users):");
+        
+        // Test current setting
+        vm.startPrank(admin);
+        vault.setMaxUsersPerBatch(100);
+        vm.stopPrank();
+        
+        // Setup 100 users
+        for (uint256 j = 0; j < 100; j++) {
+            address user = address(uint160(0x4000 + j));
+            wbera.mint(user, depositAmount);
+            
+            vm.prank(user);
+            wbera.approve(address(vault), depositAmount);
+            
+            vm.prank(user);
+            vault.deposit(depositAmount, user);
+            
+            vm.prank(user);
+            vault.requestWithdraw(withdrawAmount);
+        }
+        
+        vm.prank(fulfiller);
+        (uint256 currentBatchId,) = vault.startWithdrawalBatch();
+        
+        uint256 totalWithdrawAmount = 100 * withdrawAmount;
+        uint256 fee = totalWithdrawAmount * 1 / 100;
+        uint256 netAmount = totalWithdrawAmount - fee;
+        
+        wbera.mint(fulfiller, netAmount);
+        vm.prank(fulfiller);
+        wbera.approve(address(vault), netAmount);
+        
+        uint256 gasStart = gasleft();
+        vm.prank(fulfiller);
+        vault.fulfillBatch(currentBatchId, fee);
+        uint256 currentGasUsed = gasStart - gasleft();
+        
+        uint256 currentPercentOfBlock = (currentGasUsed * 100) / berachainBlockGasLimit;
+        
+        console2.log("Gas used: %d", currentGasUsed);
+        console2.log("Block usage: %d%%", currentPercentOfBlock);
+        console2.log("Gas per user: %d", currentGasUsed / 100);
+        
+        if (currentPercentOfBlock <= 20) {
+            console2.log("Current setting (100) is SAFE");
+        } else if (currentPercentOfBlock <= 30) {
+            console2.log("Current setting (100) is ACCEPTABLE but could be optimized");
+        } else {
+            console2.log("Current setting (100) is TOO HIGH - consider reducing");
+        }
+        
+        // Final recommendation
+        console2.log("\n=== FINAL RECOMMENDATION ===");
+        if (optimalBatchSize > 0) {
+            console2.log("Set maxUsersPerBatch to: %d", optimalBatchSize);
+            console2.log("This provides the best balance of efficiency and safety");
+        } else {
+            console2.log("All tested batch sizes exceed 20%% gas limit");
+            console2.log("Recommend reducing maxUsersPerBatch to 50 or lower");
+        }
+    }
 }
