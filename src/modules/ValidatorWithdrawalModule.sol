@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.23;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Enum} from "./Enum.sol";
+import {fatBERAV2} from "../fatBERAV2.sol";
 
 /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
 /*                          INTERFACES                        */
@@ -23,19 +25,6 @@ interface ISafe {
         returns (bool success);
 }
 
-interface IFatBERAV2 {
-    function startWithdrawalBatch() external returns (uint256 batchId, uint256 total);
-    function fulfillBatch(uint256 batchId, uint256 fee) external;
-    function WITHDRAW_FULFILLER_ROLE() external view returns (bytes32);
-    function hasRole(bytes32 role, address account) external view returns (bool);
-    function currentBatchId() external view returns (uint256);
-    function batches(uint256 batchId)
-        external
-        view
-        returns (address[] memory users, uint256[] memory amounts, bool frozen, bool fulfilled, uint256 total);
-    function asset() external view returns (address);
-}
-
 /// @dev WBERA interface for wrapping native BERA
 interface IWBERA {
     function deposit() external payable;
@@ -49,7 +38,7 @@ interface IWBERA {
  * @dev This module allows authorized EOAs to trigger withdrawal batches and validator withdrawals
  *      without requiring multi-sig approval for each operation
  */
-contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
+contract ValidatorWithdrawalModule is AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -121,20 +110,49 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
     mapping(address => bytes32[]) public safeValidatorKeys;
 
     // Function toggles for security control
-    bool public startWithdrawalBatchEnabled = true;
-    bool public requestValidatorWithdrawalEnabled = true;
+    bool public startWithdrawalBatchEnabled;
+    bool public requestValidatorWithdrawalEnabled;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          CONSTRUCTOR                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    constructor(address admin, address initialTrigger) {
+    /**
+     * @notice Contract constructor.
+     * @dev Disables initializers to prevent misuse.
+     */
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initializes the contract variables and sets up admin roles.
+     * @param admin The admin owner address.
+     * @param initialTrigger The initial trigger address.
+     * @dev Calls initializer functions from parent contracts and sets up admin roles.
+     */
+    function initialize(address admin, address initialTrigger) external initializer {
         if (admin == address(0)) revert ZeroAddress();
         if (initialTrigger == address(0)) revert ZeroAddress();
 
+        __AccessControl_init();
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
+
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(TRIGGER_ROLE, initialTrigger);
+
+        startWithdrawalBatchEnabled = false;
+        requestValidatorWithdrawalEnabled = false;
     }
+
+    /**
+     * @notice Authorizes an upgrade of the contract implementation.
+     * @param newImplementation The address of the new implementation.
+     * @dev Only callable by admin.
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          ADMIN FUNCTIONS                   */
@@ -305,12 +323,12 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         if (!config.isConfigured) revert UnauthorizedSafe();
 
         // Verify the Safe has the WITHDRAW_FULFILLER_ROLE on the fatBERA contract
-        IFatBERAV2 fatBERA = IFatBERAV2(config.fatBERAContract);
+        fatBERAV2 fatBERA = fatBERAV2(config.fatBERAContract);
         bytes32 withdrawFulfillerRole = fatBERA.WITHDRAW_FULFILLER_ROLE();
         if (!fatBERA.hasRole(withdrawFulfillerRole, safe)) revert SafeNotAuthorized();
 
         // Encode the call to startWithdrawalBatch
-        bytes memory startBatchData = abi.encodeWithSelector(IFatBERAV2.startWithdrawalBatch.selector);
+        bytes memory startBatchData = abi.encodeWithSelector(fatBERAV2.startWithdrawalBatch.selector);
 
         // Store the current batch ID before the call to detect the new one
         uint256 currentBatchIdBefore = fatBERA.currentBatchId();
@@ -324,13 +342,11 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         batchId = currentBatchIdBefore; // The batch that was just started
 
         // Get the total amount from the batch that was just frozen
-        (,, bool frozen,, uint256 total) = fatBERA.batches(batchId);
-        if (!frozen) revert TransactionFailed();
-        totalAmount = total;
+        (,, uint256 total) = fatBERA.batches(batchId);
 
-        emit WithdrawalBatchStarted(safe, msg.sender, batchId, totalAmount);
+        emit WithdrawalBatchStarted(safe, msg.sender, batchId, total);
 
-        return (batchId, totalAmount);
+        return (batchId, total);
     }
 
     /**
@@ -406,8 +422,8 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
         if (!config.isConfigured) revert UnauthorizedSafe();
 
         // Get batch info to calculate exact amount needed
-        IFatBERAV2 fatBERA = IFatBERAV2(config.fatBERAContract);
-        (,,,, uint256 totalShares) = fatBERA.batches(batchId);
+        fatBERAV2 fatBERA = fatBERAV2(config.fatBERAContract);
+        (, , uint256 totalShares) = fatBERA.batches(batchId);
         uint256 netAmount = totalShares - fee;
 
         if (netAmount == 0) revert ZeroAmount();
@@ -442,7 +458,7 @@ contract ValidatorWithdrawalModule is AccessControl, ReentrancyGuard {
 
         // Step 3: Fulfill the batch
         bytes memory fulfillData = abi.encodeWithSelector(
-            IFatBERAV2.fulfillBatch.selector,
+            fatBERAV2.fulfillBatch.selector,
             batchId,
             fee
         );

@@ -3,6 +3,7 @@ pragma solidity ^0.8.23;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
+import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {ValidatorWithdrawalModule} from "../src/modules/ValidatorWithdrawalModule.sol";
 
 contract DeployValidatorWithdrawalModule is Script {
@@ -19,10 +20,23 @@ contract DeployValidatorWithdrawalModule is Script {
         address fatBERAContract = 0xBAE11292A3E693aF73651BDa350D752AE4A391D4; // fatBERA contract address
         address safeAddress = 0xE6644e0b941A03Af8ff10BDB185d5E74D520270e; // Safe/withdraw credentials address
 
-        // Deploy the ValidatorWithdrawalModule with deployer as initial admin
-        ValidatorWithdrawalModule module = new ValidatorWithdrawalModule(deployerAdmin, initialTrigger);
+        // Deploy the implementation
+        ValidatorWithdrawalModule implementation = new ValidatorWithdrawalModule();
+        console.log("Implementation deployed to:", address(implementation));
 
-        console.log("ValidatorWithdrawalModule deployed to:", address(module));
+        // Prepare the initializer data
+        bytes memory initData = abi.encodeWithSignature(
+            "initialize(address,address)",
+            deployerAdmin,
+            initialTrigger
+        );
+
+        // Deploy the proxy
+        address proxy = Upgrades.deployUUPSProxy("ValidatorWithdrawalModule.sol:ValidatorWithdrawalModule", initData);
+        ValidatorWithdrawalModule module = ValidatorWithdrawalModule(address(proxy));
+
+        console.log("ValidatorWithdrawalModule (proxy) deployed to:", address(module));
+        console.log("Implementation address:", address(implementation));
         console.log("Initial admin (deployer):", deployerAdmin);
         console.log("Final admin (Safe):", finalAdmin);
         console.log("Initial trigger address:", initialTrigger);
@@ -45,10 +59,6 @@ contract DeployValidatorWithdrawalModule is Script {
         module.addValidatorKey(safeAddress, "0xad821eef22a49c9d9ef7f4eb07e57c166ae80804b6524d42d51f7cd8e7e49fb75ced2d61ec6d0e812324d9001464fa0a");
         console.log("Added validator pubkey 4 to whitelist");
 
-        // Disable both withdrawal functions for security
-        module.setStartWithdrawalBatchEnabled(false);
-        module.setRequestValidatorWithdrawalEnabled(false);
-        console.log("Disabled startWithdrawalBatch and requestValidatorWithdrawal functions");
 
         // Transfer admin role to the Safe
         module.grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, finalAdmin); // DEFAULT_ADMIN_ROLE
@@ -58,7 +68,8 @@ contract DeployValidatorWithdrawalModule is Script {
         vm.stopBroadcast();
 
         console.log("\n=== Deployment Summary ===");
-        console.log("ValidatorWithdrawalModule:", address(module));
+        console.log("ValidatorWithdrawalModule (Proxy):", address(module));
+        console.log("Implementation Address:", address(implementation));
         console.log("Safe Address:", safeAddress);
         console.log("fatBERA Contract:", fatBERAContract);
         console.log("Final Admin (Safe):", finalAdmin);
@@ -67,5 +78,6 @@ contract DeployValidatorWithdrawalModule is Script {
         console.log("Functions Disabled: startWithdrawalBatch, requestValidatorWithdrawal");
         console.log("Functions Enabled: fulfillWithdrawalBatch only");
         console.log("Admin Role: Transferred to Safe");
+        console.log("Contract Type: UUPS Upgradeable");
     }
 } 
