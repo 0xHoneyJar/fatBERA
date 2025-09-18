@@ -2,7 +2,7 @@
 pragma solidity ^0.8.23;
 
 import "forge-std/Script.sol";
-import { fatBERA as FatBERA } from "../src/fatBERA.sol";
+import {fatBERA as FatBERA} from "../src/fatBERA.sol";
 import "../src/StakedFatBERAV2.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {Options} from "openzeppelin-foundry-upgrades/Options.sol";

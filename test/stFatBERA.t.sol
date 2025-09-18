@@ -10,17 +10,18 @@ import {StakedFatBERAV2} from "../src/StakedFatBERAV2.sol";
 import {fatBERA as FatBERA} from "../src/fatBERA.sol";
 
 contract stFatBERATest is Test {
-    StakedFatBERAV2     public stFatBERA;
-    FatBERA             public fatBERA      = FatBERA(0xBAE11292A3E693aF73651BDa350D752AE4A391D4);
-    IERC20              public wbera        = IERC20(0x6969696969696969696969696969696969696969);
-    address             public fbnotifier   = 0x73e34207C4d35e6c7Bf7D23B8ADD6975aa8049B7;
+    StakedFatBERAV2 public stFatBERA;
+    FatBERA public fatBERA = FatBERA(0xBAE11292A3E693aF73651BDa350D752AE4A391D4);
+    IERC20 public wbera = IERC20(0x6969696969696969696969696969696969696969);
+    address public fbnotifier = 0x73e34207C4d35e6c7Bf7D23B8ADD6975aa8049B7;
 
     // ------------------------------------------------------------------------
-    address owner       = makeAddr("owner");
-    address user        = makeAddr("user");
-    address operator    = makeAddr("operator");
-    address treasury    = makeAddr("treasury");
+    address owner = makeAddr("owner");
+    address user = makeAddr("user");
+    address operator = makeAddr("operator");
+    address treasury = makeAddr("treasury");
     // ------------------------------------------------------------------------
+
     function setUp() public {
         vm.createSelectFork("https://rpc.berachain.com", 4048939);
 
@@ -88,7 +89,9 @@ contract stFatBERATest is Test {
         // compound stFatBERA
         vm.prank(operator);
         stFatBERA.compound();
-        assertGt(fatBERA.balanceOf(address(stFatBERA)), AMOUNT_TO_DEPOSIT, "stFatBERA's FatBERa holdings should increase");
+        assertGt(
+            fatBERA.balanceOf(address(stFatBERA)), AMOUNT_TO_DEPOSIT, "stFatBERA's FatBERa holdings should increase"
+        );
 
         // user should be owed slightly more than the original 100 bera
         assertGt(stFatBERA.previewRedeem(minted), AMOUNT_TO_DEPOSIT, "user should be owed more than original deposit");

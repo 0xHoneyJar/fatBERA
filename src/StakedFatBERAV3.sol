@@ -12,12 +12,7 @@ import {FixedPointMathLib as FPML} from "solady/utils/FixedPointMathLib.sol";
 
 import {fatBERA as FatBERA} from "./fatBERA.sol";
 
-contract StakedFatBERAV3 is
-    ERC4626Upgradeable,
-    PausableUpgradeable,
-    UUPSUpgradeable,
-    AccessControlUpgradeable
-{
+contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgradeable, AccessControlUpgradeable {
     /* ───────────────────────────────────────────────────────────────────────────
         EVENTS
     ─────────────────────────────────────────────────────────────────────────── */
@@ -25,9 +20,10 @@ contract StakedFatBERAV3 is
     /* ───────────────────────────────────────────────────────────────────────────
         CONSTANTS
     ─────────────────────────────────────────────────────────────────────────── */
-    bytes32 public constant OPERATOR_ROLE  = keccak256("OPERATOR_ROLE");
-    bytes32 public constant ADMIN_ROLE     = DEFAULT_ADMIN_ROLE;
-    IERC20  public constant WBERA          = IERC20(0x6969696969696969696969696969696969696969);
+
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    IERC20 public constant WBERA = IERC20(0x6969696969696969696969696969696969696969);
 
     /* ───────────────────────────────────────────────────────────────────────────
         STORAGE
@@ -39,12 +35,14 @@ contract StakedFatBERAV3 is
         CONSTRUCTOR
     ─────────────────────────────────────────────────────────────────────────── */
     /// @custom:oz-upgrades-unsafe-allow constructor
+
     constructor() {
         _disableInitializers();
     }
     /* ───────────────────────────────────────────────────────────────────────────
         INITIALIZER
     ─────────────────────────────────────────────────────────────────────────── */
+
     function initialize(address _owner, address _fatBERA) external initializer {
         fatBERA = FatBERA(_fatBERA);
         __UUPSUpgradeable_init();
@@ -62,6 +60,7 @@ contract StakedFatBERAV3 is
     /* ───────────────────────────────────────────────────────────────────────────
         ADMIN LOGIC
     ─────────────────────────────────────────────────────────────────────────── */
+
     function pause() public onlyRole(ADMIN_ROLE) {
         _pause();
     }
@@ -81,6 +80,7 @@ contract StakedFatBERAV3 is
     /*────────────────────────────────────────────────────────────────────────────
         OPERATOR LOGIC
     ────────────────────────────────────────────────────────────────────────────*/
+
     function compound() public onlyRole(OPERATOR_ROLE) {
         fatBERA.claimRewards(address(this));
         uint256 amount = fatBERA.deposit(WBERA.balanceOf(address(this)), address(this));
@@ -89,28 +89,26 @@ contract StakedFatBERAV3 is
     /*────────────────────────────────────────────────────────────────────────────
         INTERNAL LOGIC
     ────────────────────────────────────────────────────────────────────────────*/
-    function _withdraw(
-        address caller,
-        address receiver,
-        address owner,
-        uint256 assets,
-        uint256 shares
-    ) internal override {
+
+    function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares)
+        internal
+        override
+    {
         uint256 feeToUse = owner == treasury ? 0 : exitFee;
-        
+
         uint256 feeInShares = _calculateShareFee(shares, feeToUse);
         uint256 sharesAfterFee = shares - feeInShares;
         super._withdraw(caller, receiver, owner, assets, sharesAfterFee);
-        
+
         if (feeInShares > 0 && treasury != address(0) && treasury != address(this)) {
             _transfer(owner, treasury, feeInShares);
         }
     }
-    
+
     /*────────────────────────────────────────────────────────────────────────────
         FEE CALCULATION HELPER
     ────────────────────────────────────────────────────────────────────────────*/
-    
+
     /// @dev Calculates fee on shares, rounded up to favor the vault, mirroring OZ's Math.Rounding.Ceil.
     function _calculateShareFee(uint256 shares, uint256 feeBasisPoints) private pure returns (uint256) {
         if (feeBasisPoints == 0 || shares == 0) return 0;
@@ -119,49 +117,41 @@ contract StakedFatBERAV3 is
     /* ───────────────────────────────────────────────────────────────────────────
         PUBLIC LOGIC
     ─────────────────────────────────────────────────────────────────────────── */
-    function deposit(
-        uint256 assets,
-        address receiver
-    ) public override whenNotPaused returns (uint256) {
+
+    function deposit(uint256 assets, address receiver) public override whenNotPaused returns (uint256) {
         return super.deposit(assets, receiver);
     }
 
-    function mint(
-        uint256 shares,
-        address receiver
-    ) public override whenNotPaused returns (uint256) {
+    function mint(uint256 shares, address receiver) public override whenNotPaused returns (uint256) {
         return super.mint(shares, receiver);
     }
 
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public override whenNotPaused returns (uint256) {
+    function withdraw(uint256 assets, address receiver, address owner)
+        public
+        override
+        whenNotPaused
+        returns (uint256)
+    {
         if (owner == treasury) {
             uint256 maxAssets = maxWithdraw(owner);
             require(assets <= maxAssets, "ERC4626: withdraw more than max");
-            
+
             uint256 shares = convertToShares(assets);
             _withdraw(_msgSender(), receiver, owner, assets, shares);
-            
+
             return shares;
         }
         return super.withdraw(assets, receiver, owner);
     }
 
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public override whenNotPaused returns (uint256) {
+    function redeem(uint256 shares, address receiver, address owner) public override whenNotPaused returns (uint256) {
         if (owner == treasury) {
             uint256 maxShares = maxRedeem(owner);
             require(shares <= maxShares, "ERC4626: redeem more than max");
-            
+
             uint256 assets = _convertToAssets(shares, Math.Rounding.Ceil);
             _withdraw(_msgSender(), receiver, owner, assets, shares);
-            
+
             return assets;
         }
         return super.redeem(shares, receiver, owner);
@@ -181,7 +171,8 @@ contract StakedFatBERAV3 is
     /* ───────────────────────────────────────────────────────────────────────────
         PUBLIC VIEW LOGIC
     ─────────────────────────────────────────────────────────────────────────── */
-    /** @dev See {IERC4626-previewWithdraw}.
+    /**
+     * @dev See {IERC4626-previewWithdraw}.
      * Returns shares needed to withdraw the specified NET assets (after fees).
      * The user specifies what they want to receive, we calculate total shares needed.
      */
@@ -191,7 +182,8 @@ contract StakedFatBERAV3 is
         return FPML.mulDivUp(sharesNeeded, 10000, 10000 - exitFee);
     }
 
-    /** @dev See {IERC4626-previewRedeem}. 
+    /**
+     * @dev See {IERC4626-previewRedeem}. 
      * Returns the NET assets after fees - what the user will actually receive.
      */
     function previewRedeem(uint256 shares) public view override returns (uint256) {

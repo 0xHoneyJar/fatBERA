@@ -11,12 +11,7 @@ import {FixedPointMathLib as FPML} from "solady/utils/FixedPointMathLib.sol";
 
 import {fatBERA as FatBERA} from "./fatBERA.sol";
 
-contract StakedFatBERAV2 is
-    ERC4626Upgradeable,
-    PausableUpgradeable,
-    UUPSUpgradeable,
-    AccessControlUpgradeable
-{
+contract StakedFatBERAV2 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgradeable, AccessControlUpgradeable {
     /* ───────────────────────────────────────────────────────────────────────────
         EVENTS
     ─────────────────────────────────────────────────────────────────────────── */
@@ -24,9 +19,10 @@ contract StakedFatBERAV2 is
     /* ───────────────────────────────────────────────────────────────────────────
         CONSTANTS
     ─────────────────────────────────────────────────────────────────────────── */
-    bytes32 public constant OPERATOR_ROLE  = keccak256("OPERATOR_ROLE");
-    bytes32 public constant ADMIN_ROLE     = DEFAULT_ADMIN_ROLE;
-    IERC20  public constant WBERA          = IERC20(0x6969696969696969696969696969696969696969);
+
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    IERC20 public constant WBERA = IERC20(0x6969696969696969696969696969696969696969);
 
     /* ───────────────────────────────────────────────────────────────────────────
         STORAGE
@@ -38,12 +34,14 @@ contract StakedFatBERAV2 is
         CONSTRUCTOR
     ─────────────────────────────────────────────────────────────────────────── */
     /// @custom:oz-upgrades-unsafe-allow constructor
+
     constructor() {
         _disableInitializers();
     }
     /* ───────────────────────────────────────────────────────────────────────────
         INITIALIZER
     ─────────────────────────────────────────────────────────────────────────── */
+
     function initialize(address _owner, address _fatBERA) external initializer {
         fatBERA = FatBERA(_fatBERA);
         __UUPSUpgradeable_init();
@@ -61,6 +59,7 @@ contract StakedFatBERAV2 is
     /* ───────────────────────────────────────────────────────────────────────────
         ADMIN LOGIC
     ─────────────────────────────────────────────────────────────────────────── */
+
     function pause() public onlyRole(ADMIN_ROLE) {
         _pause();
     }
@@ -79,6 +78,7 @@ contract StakedFatBERAV2 is
     /*────────────────────────────────────────────────────────────────────────────
         OPERATOR LOGIC
     ────────────────────────────────────────────────────────────────────────────*/
+
     function compound() public onlyRole(OPERATOR_ROLE) {
         fatBERA.claimRewards(address(this));
         uint256 amount = fatBERA.deposit(WBERA.balanceOf(address(this)), address(this));
@@ -87,13 +87,11 @@ contract StakedFatBERAV2 is
     /*────────────────────────────────────────────────────────────────────────────
         INTERNAL LOGIC
     ────────────────────────────────────────────────────────────────────────────*/
-    function _withdraw(
-        address caller,
-        address receiver,
-        address owner,
-        uint256 assets,
-        uint256 shares
-    ) internal override {
+
+    function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares)
+        internal
+        override
+    {
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
         }
@@ -115,33 +113,25 @@ contract StakedFatBERAV2 is
     /* ───────────────────────────────────────────────────────────────────────────
         PUBLIC LOGIC
     ─────────────────────────────────────────────────────────────────────────── */
-    function deposit(
-        uint256 assets,
-        address receiver
-    ) public override whenNotPaused returns (uint256) {
+
+    function deposit(uint256 assets, address receiver) public override whenNotPaused returns (uint256) {
         return super.deposit(assets, receiver);
     }
 
-    function mint(
-        uint256 shares,
-        address receiver
-    ) public override whenNotPaused returns (uint256) {
+    function mint(uint256 shares, address receiver) public override whenNotPaused returns (uint256) {
         return super.mint(shares, receiver);
     }
 
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public override whenNotPaused returns (uint256) {
+    function withdraw(uint256 assets, address receiver, address owner)
+        public
+        override
+        whenNotPaused
+        returns (uint256)
+    {
         return super.withdraw(assets, receiver, owner);
     }
 
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public override whenNotPaused returns (uint256) {
+    function redeem(uint256 shares, address receiver, address owner) public override whenNotPaused returns (uint256) {
         return super.redeem(shares, receiver, owner);
     }
 
@@ -153,7 +143,9 @@ contract StakedFatBERAV2 is
         return result - FPML.mulDiv(result, exitFee, 10000);
     }
 
-    /** @dev See {IERC4626-previewRedeem}. */
+    /**
+     * @dev See {IERC4626-previewRedeem}.
+     */
     function previewRedeem(uint256 shares) public view override returns (uint256) {
         uint256 result = super.previewRedeem(shares);
         return result - FPML.mulDiv(result, exitFee, 10000);

@@ -1331,7 +1331,7 @@ contract fatBERATest is Test {
         wbera.mint(userA, 10 ether);
         wbera.mint(userB, 5 ether);
         wbera.mint(admin, 1000000 ether);
-        
+
         vm.prank(userA);
         wbera.approve(address(vault), type(uint256).max);
         vm.prank(userB);
@@ -1341,7 +1341,7 @@ contract fatBERATest is Test {
 
         console.log("\nScenario 1: 2-day reward duration, hourly notifications over 1 week");
         console.log("==============================================");
-        
+
         // Set reward duration to 2 days
         vm.prank(admin);
         vault.setRewardsDuration(address(wbera), 2 days);
@@ -1352,15 +1352,15 @@ contract fatBERATest is Test {
         console.log("Initial deposit - User A: 10 BERA");
 
         uint256 startTime = block.timestamp;
-        
+
         // Simulate hourly notifications for first scenario over a week
         for (uint256 hour = 1; hour <= 168; hour++) {
             vm.warp(startTime + hour * 1 hours);
-            
+
             // Calculate hourly reward: 1 BERA per day per fatBERA
             uint256 totalStaked = hour <= 24 ? 10 ether : 15 ether;
             uint256 hourlyReward = (totalStaked / 10) / 24; // Direct calculation for hourly rate
-            
+
             vm.prank(admin);
             vault.notifyRewardAmount(address(wbera), hourlyReward);
 
@@ -1399,7 +1399,7 @@ contract fatBERATest is Test {
         wbera.mint(userA, 10 ether);
         wbera.mint(userB, 5 ether);
         wbera.mint(admin, 1000000 ether);
-        
+
         vm.prank(userA);
         wbera.approve(address(vault), type(uint256).max);
         vm.prank(userB);
@@ -1409,7 +1409,7 @@ contract fatBERATest is Test {
 
         console.log("\nScenario 2: 2-day reward duration, 48-hour notifications over 1 week");
         console.log("==============================================");
-        
+
         // Set reward duration to 2 days
         vm.prank(admin);
         vault.setRewardsDuration(address(wbera), 2 days);
@@ -1425,12 +1425,12 @@ contract fatBERATest is Test {
         // Simulate hourly checks but 48-hour notifications
         for (uint256 hour = 1; hour <= 168; hour++) {
             vm.warp(startTime + hour * 1 hours);
-            
+
             // Notify rewards every 48 hours (2 days)
             if (hour % 48 == 0) {
                 uint256 totalStaked = hour <= 24 ? 10 ether : 15 ether;
                 uint256 twoDayReward = (totalStaked / 10) * 2;
-                
+
                 vm.prank(admin);
                 vault.notifyRewardAmount(address(wbera), twoDayReward);
                 totalRewardsNotified += twoDayReward;
