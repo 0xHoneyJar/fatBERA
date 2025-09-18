@@ -17,6 +17,8 @@ contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgrade
         EVENTS
     ─────────────────────────────────────────────────────────────────────────── */
     event Compounded(uint256 amount);
+    event ExitFeeUpdated(uint256 oldExitFee, uint256 newExitFee);
+    event TreasuryUpdated(address oldTreasury, address newTreasury);
     /* ───────────────────────────────────────────────────────────────────────────
         CONSTANTS
     ─────────────────────────────────────────────────────────────────────────── */
@@ -44,6 +46,7 @@ contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgrade
     ─────────────────────────────────────────────────────────────────────────── */
 
     function initialize(address _owner, address _fatBERA) external initializer {
+        require(_owner != address(0) && _fatBERA != address(0), "invalid init");
         fatBERA = FatBERA(_fatBERA);
         __UUPSUpgradeable_init();
         __ERC4626_init(IERC20(_fatBERA));
@@ -53,7 +56,9 @@ contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgrade
 
         _grantRole(ADMIN_ROLE, _owner);
 
-        WBERA.approve(address(fatBERA), type(uint256).max);
+        // Use SafeERC20 to set initial allowance
+        IERC20(WBERA).approve(address(fatBERA), 0);
+        IERC20(WBERA).approve(address(fatBERA), type(uint256).max);
     }
 
     function _authorizeUpgrade(address) internal override onlyRole(ADMIN_ROLE) {}
@@ -71,11 +76,15 @@ contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgrade
 
     function setExitFee(uint256 _exitFee) public onlyRole(ADMIN_ROLE) {
         require(_exitFee < 10000, "invalid fee");
+        uint256 old = exitFee;
         exitFee = _exitFee;
+        emit ExitFeeUpdated(old, _exitFee);
     }
 
     function setTreasury(address _treasury) public onlyRole(ADMIN_ROLE) {
+        address old = treasury;
         treasury = _treasury;
+        emit TreasuryUpdated(old, _treasury);
     }
     /*────────────────────────────────────────────────────────────────────────────
         OPERATOR LOGIC
@@ -98,11 +107,11 @@ contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgrade
 
         uint256 feeInShares = _calculateShareFee(shares, feeToUse);
         uint256 sharesAfterFee = shares - feeInShares;
-        super._withdraw(caller, receiver, owner, assets, sharesAfterFee);
-
         if (feeInShares > 0 && treasury != address(0) && treasury != address(this)) {
             _transfer(owner, treasury, feeInShares);
         }
+
+        super._withdraw(caller, receiver, owner, assets, sharesAfterFee);
     }
 
     /*────────────────────────────────────────────────────────────────────────────
