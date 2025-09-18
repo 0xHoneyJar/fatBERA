@@ -136,7 +136,8 @@ contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgrade
             uint256 maxAssets = maxWithdraw(owner);
             require(assets <= maxAssets, "ERC4626: withdraw more than max");
 
-            uint256 shares = convertToShares(assets);
+            // Use rounding up to ensure at least 1 share is burned for any non-zero asset amount
+            uint256 shares = _convertToShares(assets, Math.Rounding.Ceil);
             _withdraw(_msgSender(), receiver, owner, assets, shares);
 
             return shares;

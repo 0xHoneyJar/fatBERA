@@ -397,4 +397,36 @@ contract StakedFatBERAV3Test is Test {
         // Treasury should get almost all shares
         assertApproxEqRel(vault.balanceOf(treasury), shares, 0.01e18, "Treasury should get ~99.99% of shares");
     }
+
+  /*────────────────────────────────────────────────────────────────────────────
+      EXPLOIT DEMONSTRATION (PRE-FIX BEHAVIOR)
+    ────────────────────────────────────────────────────────────────────────────*/
+
+  function testTreasuryWithdrawBurnsSharesAfterFix() public {
+      // Treasury obtains xfatBERA shares
+      wbera.mint(treasury, INITIAL_DEPOSIT);
+      vm.startPrank(treasury);
+      wbera.approve(address(fatberaVault), type(uint256).max);
+      fatberaVault.deposit(INITIAL_DEPOSIT, treasury);
+      fatberaVault.approve(address(vault), type(uint256).max);
+      uint256 mintedShares = vault.deposit(INITIAL_DEPOSIT, treasury);
+      vm.stopPrank();
+
+      // Manipulate exchange rate so that totalAssets > totalSupply by transferring
+      // a dust amount of fatBERA directly to the vault (no shares minted)
+      vm.prank(alice);
+      fatberaVault.transfer(address(vault), 1);
+
+      // Sanity: ratio totalSupply/totalAssets < 1 ensures floor conversion can be zero
+      assertLt(vault.totalSupply(), vault.totalAssets(), "test setup failed: ratio not < 1");
+
+      // After fix: treasury withdraws 1 wei of assets and must burn at least 1 share due to ceil rounding
+      vm.startPrank(treasury);
+      uint256 sharesBurned = vault.withdraw(1, treasury, treasury);
+      vm.stopPrank();
+
+      assertGt(sharesBurned, 0, "Must burn non-zero shares for non-zero asset withdrawal");
+      assertEq(fatberaVault.balanceOf(treasury), 1, "Treasury should receive the withdrawn asset");
+      assertEq(vault.totalSupply(), mintedShares - sharesBurned, "Total supply should decrease by burned shares");
+  }
 }
