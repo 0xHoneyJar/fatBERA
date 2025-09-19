@@ -6,7 +6,6 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {FixedPointMathLib as FPML} from "solady/utils/FixedPointMathLib.sol";
 
@@ -46,7 +45,6 @@ contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgrade
     ─────────────────────────────────────────────────────────────────────────── */
 
     function initialize(address _owner, address _fatBERA) external initializer {
-        require(_owner != address(0) && _fatBERA != address(0), "invalid init");
         fatBERA = FatBERA(_fatBERA);
         __UUPSUpgradeable_init();
         __ERC4626_init(IERC20(_fatBERA));
@@ -56,8 +54,6 @@ contract StakedFatBERAV3 is ERC4626Upgradeable, PausableUpgradeable, UUPSUpgrade
 
         _grantRole(ADMIN_ROLE, _owner);
 
-        // Use SafeERC20 to set initial allowance
-        IERC20(WBERA).approve(address(fatBERA), 0);
         IERC20(WBERA).approve(address(fatBERA), type(uint256).max);
     }
 
