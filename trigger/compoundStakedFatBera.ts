@@ -18,11 +18,11 @@ export const compoundStakedFatBera = schedules.task({
     const client = createWalletClient({
       account,
       chain: berachain,
-      transport: http("http://57.129.49.205:8545/"),
+      transport: http("https://rpc.berachain.com"),
     });
     const publicClient = createPublicClient({
       chain: berachain,
-      transport: http("http://57.129.49.205:8545/"),
+      transport: http("https://rpc.berachain.com"),
     });
 
     const hash = await client.writeContract({
@@ -38,6 +38,7 @@ export const compoundStakedFatBera = schedules.task({
       ] as const,
       functionName: "compound",
       args: [],
+      gas: 500000n,
     });
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
